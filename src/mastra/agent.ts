@@ -128,8 +128,14 @@ function stripMentions(text: string): string {
 
 /**
  * Show a Slack thinking indicator with rotating loading messages while the
- * agent works. Auto-clears when chat-adapter posts the reply. Best-effort:
- * failures (rate limits, transient errors) shouldn't block the response.
+ * agent works. Auto-clears as soon as anything lands in the thread, including
+ * the empty placeholder message that `chat.startStream` posts when the agent
+ * begins streaming — so the rotating messages are only visible for the brief
+ * window before the first stream chunk. After that Slack shows its built-in
+ * "Thinking..." placeholder until our first text chunk arrives.
+ *
+ * Best-effort: failures (rate limits, transient errors) shouldn't block the
+ * response.
  */
 async function setLoadingStatus(thread: Thread): Promise<void> {
   const adapter = thread.adapter as SlackAdapter;
