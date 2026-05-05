@@ -15,23 +15,32 @@ Slack bot for Sanity's Oslo office shared [Oda](https://oda.com/) grocery accoun
 You need [Bun](https://bun.sh/), an [Anthropic API key](https://console.anthropic.com/), and a Slack workspace.
 
 ```sh
-# 1. Sign in to Oda (cookies stored in ~/.sanity-oda)
-bun run oda:login -- --user office@example.com --pass yourpassword
-
-# 2. Configure
+# 1. Configure
 cp .env.template .env
-# fill in ANTHROPIC_API_KEY, SLACK_BOT_TOKEN, SLACK_APP_TOKEN
+# fill in ANTHROPIC_API_KEY, SLACK_BOT_TOKEN, SLACK_APP_TOKEN, ODA_EMAIL, ODA_PASSWORD
 
-# 3. Create the Slack app from the manifest
+# 2. Create the Slack app from the manifest
 bun run manifest
 # follow the printed link, paste the manifest, install to workspace
 
-# 4. Run
+# 3. Run
 bun install
 bun run dev
 ```
 
-For production, also set `ODA_EMAIL` and `ODA_PASSWORD` so the bot can re-authenticate when the Oda session expires.
+The bot signs in to Oda automatically using `ODA_EMAIL` and `ODA_PASSWORD` and re-authenticates when the session expires. Cookies are persisted under `~/.sanity-oda` so subsequent starts don't need to log in again.
+
+### Optional CLI
+
+A few diagnostic helpers for when you want to poke at the auth state directly:
+
+```sh
+bun run oda:whoami   # check the current Oda user
+bun run oda:login    # force a fresh login (useful for testing creds)
+bun run oda:logout   # clear stored cookies (next request re-authenticates)
+```
+
+If you'd rather not put credentials in `.env`, omit `ODA_EMAIL`/`ODA_PASSWORD` and run `bun run oda:login` once manually. The bot will keep working until the session expires, after which you'll see an `OdaSessionExpiredError` and need to re-run the login command.
 
 ## How it's wired
 
@@ -42,15 +51,11 @@ For production, also set `ODA_EMAIL` and `ODA_PASSWORD` so the bot can re-authen
 
 The bot only responds to explicit `@`-mentions, and only in `#oslo-office-internal` and `#test-content-agent`.
 
-## Useful scripts
+## Scripts
 
 ```sh
 bun run dev          # start with hot reload
 bun run start        # start without hot reload
 bun run test         # run vitest
 bun run manifest     # print the Slack app manifest
-
-bun run oda:login    # authenticate with Oda
-bun run oda:logout   # clear stored session
-bun run oda:whoami   # check current Oda user
 ```
