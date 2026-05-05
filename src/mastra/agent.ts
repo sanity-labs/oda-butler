@@ -1,14 +1,16 @@
 import { createSlackAdapter, type SlackAdapter } from "@chat-adapter/slack";
 import { Agent } from "@mastra/core/agent";
 import type { Message, Thread } from "chat";
+import { sampleSize } from "es-toolkit";
 import { requireEnv } from "../lib/env.ts";
 import { logger } from "../lib/logger.ts";
+import { decodeSlackThreadId } from "../lib/slack.ts";
 import {
   ALLOWED_CHANNELS,
-  HISTORY_LIMIT,
-  LOADING_MESSAGES,
-  MENTION_PATTERN,
+  LOADING_MESSAGE_LIMIT,
+  LOADING_MESSAGE_POOL,
 } from "./constants.ts";
+import { buildConversation } from "./conversation.ts";
 import { ODA_SYSTEM_PROMPT } from "./instructions.ts";
 import { memory } from "./memory.ts";
 import { asStreamingPlan } from "./streaming.ts";
@@ -18,7 +20,6 @@ import {
   removeRecurringItem,
   updateRecurringItem,
 } from "./tools/recurring.ts";
-import type { Turn } from "./types.ts";
 
 async function isAllowedChannel(thread: Thread): Promise<boolean> {
   const info = await thread.channel.fetchMetadata();
@@ -76,70 +77,13 @@ async function handleMention(thread: Thread, message: Message): Promise<void> {
 }
 
 /**
- * Map the Slack thread to a list of conversation turns. Each turn carries
- * Slack's message `ts` as both `id` and `createdAt`, which lets Mastra:
- *   - dedupe automatically against memory (matches by id)
- *   - order chronologically by createdAt regardless of input order
- * Bot replies become `assistant` turns; everyone else's messages become
- * `user` turns prefixed with the speaker's name so the agent can tell
- * speakers apart in multi-person threads.
+ * Show a Slack thinking indicator with a rotating list of food-themed
+ * loading messages while the agent works. We sample a fresh subset on each
+ * mention so the messages vary across invocations.
  *
- * We only include history strictly older than `current` so that after
- * Mastra's chronological sort the conversation always ends with the user's
- * mention. Anthropic's newer models reject conversations ending with an
- * assistant turn ("prefill mode not supported"), and a stale bot apology
- * with a later ts is exactly the kind of thing that would otherwise sneak
- * in at the end.
- */
-async function buildConversation(
-  thread: Thread,
-  current: Message,
-): Promise<Turn[]> {
-  const currentTs = slackTsToDate(current.id).getTime();
-  const collected: Message[] = [];
-  for await (const msg of thread.allMessages) {
-    if (collected.length >= HISTORY_LIMIT) break;
-    if (msg.id === current.id) continue;
-    if (slackTsToDate(msg.id).getTime() >= currentTs) continue;
-    if (!stripMentions(msg.text).trim()) continue;
-    collected.push(msg);
-  }
-  collected.push(current);
-
-  return collected.map(toModelMessage);
-}
-
-function toModelMessage(msg: Message): Turn {
-  const text = stripMentions(msg.text).trim();
-  const createdAt = slackTsToDate(msg.id);
-  const role = msg.author.isMe ? "assistant" : "user";
-  const speaker = msg.author.isMe
-    ? null
-    : msg.author.fullName || msg.author.userName;
-  const display = speaker ? `${speaker}: ${text}` : text;
-  return {
-    id: msg.id,
-    role,
-    createdAt,
-    content: { format: 2, parts: [{ type: "text", text: display }] },
-  };
-}
-
-/** Slack message IDs are `"<seconds>.<microseconds>"` since epoch. */
-function slackTsToDate(ts: string): Date {
-  const seconds = Number.parseFloat(ts);
-  return Number.isFinite(seconds) ? new Date(seconds * 1000) : new Date();
-}
-
-function stripMentions(text: string): string {
-  return text.replace(MENTION_PATTERN, "");
-}
-
-/**
- * Show a Slack thinking indicator with rotating loading messages while the
- * agent works. Auto-clears as soon as anything lands in the thread, including
- * the empty placeholder message that `chat.startStream` posts when the agent
- * begins streaming — so the rotating messages are only visible for the brief
+ * Auto-clears as soon as anything lands in the thread, including the empty
+ * placeholder message that `chat.startStream` posts when the agent begins
+ * streaming — so the rotating messages are only visible for the brief
  * window before the first stream chunk. After that Slack shows its built-in
  * "Thinking..." placeholder until our first text chunk arrives.
  *
@@ -149,16 +93,22 @@ function stripMentions(text: string): string {
 async function setLoadingStatus(thread: Thread): Promise<void> {
   const adapter = thread.adapter as SlackAdapter;
   if (typeof adapter.setAssistantStatus !== "function") return;
+
+  const decoded = decodeSlackThreadId(thread.id);
+  if (!decoded) {
+    logger.warn("could not decode Slack thread id", { threadId: thread.id });
+    return;
+  }
+
   try {
     await adapter.setAssistantStatus(
-      thread.channelId,
-      thread.id,
+      decoded.channel,
+      decoded.threadTs,
       "is shopping…",
-      LOADING_MESSAGES,
+      sampleSize(LOADING_MESSAGE_POOL, LOADING_MESSAGE_LIMIT),
     );
   } catch (err) {
     logger.warn("failed to set loading status", {
-      channelId: thread.channelId,
       threadId: thread.id,
       error: err,
     });

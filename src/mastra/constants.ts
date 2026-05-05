@@ -7,15 +7,13 @@ export const ALLOWED_CHANNELS = new Set([
 /** Maximum prior messages to load from a thread when reconstructing context. */
 export const HISTORY_LIMIT = 20;
 
-/** Slack user-mention syntax, e.g. `<@U0AGNB12B9V>`. */
-export const MENTION_PATTERN = /<@[A-Z0-9]+>/g;
-
 /**
- * Loading messages Slack rotates through under the bot's thinking indicator.
- * Max 10 entries (Slack hard cap). Keep them on-brand: dry, food-adjacent,
- * a little snarky. Slack auto-clears when we post the reply.
+ * Pool of food/grocery-themed loading messages. We sample up to 10 of these
+ * for each agent invocation; Slack rotates through them as a thinking
+ * indicator until our first reply lands. Keep them on-brand: dry, lightly
+ * snarky, food-adjacent.
  */
-export const LOADING_MESSAGES = [
+export const LOADING_MESSAGE_POOL = [
   "Squeezing the oranges…",
   "Asking the cheese for an opinion…",
   "Counting the bananas…",
@@ -26,4 +24,27 @@ export const LOADING_MESSAGES = [
   "Comparing kr per liter…",
   "Negotiating with the bakery…",
   "Reading the back of the box…",
+  "Sniffing the melon for ripeness…",
+  "Asking grandma if it's a good deal…",
+  "Checking the use-by date twice…",
+  "Polishing the apples…",
+  "Folding the receipts…",
+  "Wrestling the shopping cart…",
+  "Translating from grocery Norwegian…",
+  "Sorting the bananas by ripeness…",
+  "Looking for the secret salt aisle…",
+  "Tasting the air for cheap pasta…",
+  "Pretending to read the ingredients list…",
+  "Untangling the produce bags…",
+  "Whispering to the brunost…",
+  "Practicing my matpakke skills…",
+  "Doing math on the bottle deposit…",
+  "Avoiding the lutefisk aisle…",
+  "Memorizing the discount stickers…",
+  "Listening for the kjempålit angle…",
+  "Tasting test… for science…",
+  "Calling Tine for a second opinion…",
 ];
+
+/** Slack hard cap on loading_messages array. */
+export const LOADING_MESSAGE_LIMIT = 10;
