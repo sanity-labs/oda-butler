@@ -2,12 +2,15 @@ import { compact } from "es-toolkit";
 import { toFinite } from "es-toolkit/compat";
 import type {
   WireCart,
+  WireCartItem,
   WireOrderDetail,
   WireOrdersResponse,
+  WireProduct,
   WireProductList,
   WireProductListSummary,
   WireProductListsPage,
   WireRecurringOrderMeta,
+  WireSearchResponse,
 } from "./api-types.ts";
 import { findDehydratedQuery, readPath } from "./next-data.ts";
 import type {
@@ -24,7 +27,32 @@ import type {
   User,
 } from "./types.ts";
 
-export function parseProductPage(url: string, nextData: unknown): ProductPage {
+/**
+ * Parse the REST search response. Returns ~40 products per page; if the
+ * total is larger than the returned page, `hasMore` is true so callers can
+ * paginate via the `page` query param.
+ */
+export function parseSearchResponse(
+  url: string,
+  data: WireSearchResponse,
+  page: number,
+): ProductPage {
+  const products = (data.products ?? []).map(toProduct);
+  const totalHits = data.attributes?.total_hits ?? products.length;
+  const hasMore = page * products.length < totalHits && products.length > 0;
+  return { pageUrl: url, items: products, hasMore };
+}
+
+/**
+ * Parse search results embedded in the `__NEXT_DATA__` of the HTML search
+ * page. Used as a fuzzy-match fallback when the REST search returns zero
+ * results: the HTML page does intent matching (e.g. "snickers ice cream"
+ * → "Snickers-Is") that the REST endpoint doesn't.
+ */
+export function parseHtmlSearchPage(
+  url: string,
+  nextData: unknown,
+): ProductPage {
   const data = findDehydratedQuery(
     nextData,
     "mixedSearch",
@@ -34,18 +62,52 @@ export function parseProductPage(url: string, nextData: unknown): ProductPage {
   if (!Array.isArray(items)) {
     return { pageUrl: url, items: [], hasMore: false };
   }
-
   const products = compact(
     items.map((item) =>
-      readPath<string>(item, "type") === "product" ? toProduct(item) : null,
+      readPath<string>(item, "type") === "product"
+        ? toProductFromHtmlEntry(item)
+        : null,
     ),
   );
-
   return {
     pageUrl: url,
     items: products,
     hasMore: readPath<boolean>(data, "attributes.hasMoreItems") === true,
   };
+}
+
+/**
+ * The HTML search page nests product fields under `attributes` and uses
+ * camelCase keys, unlike everywhere else (cart, REST search, product detail)
+ * which uses snake_case at the top level. We translate to a wire Product
+ * shape and reuse `toProduct`.
+ */
+function toProductFromHtmlEntry(item: unknown): Product | null {
+  const attributes = readPath<Record<string, unknown>>(item, "attributes");
+  if (!attributes) return null;
+  const id =
+    readPath<number>(attributes, "id") ?? readPath<number>(item, "id") ?? 0;
+  return {
+    id,
+    name: firstString(attributes, "fullName", "name") ?? "Unknown Product",
+    subtitle: readPath<string>(attributes, "nameExtra") ?? "",
+    price: toFinite(readPath(attributes, "grossPrice")),
+    relativePrice: toFinite(readPath(attributes, "grossUnitPrice")),
+    relativePriceUnit: unitSuffix(
+      readPath(attributes, "unitPriceQuantityAbbreviation"),
+    ),
+    url: htmlEntryUrl(attributes, id),
+  };
+}
+
+function htmlEntryUrl(
+  attributes: Record<string, unknown>,
+  productId: number,
+): string {
+  const direct = firstString(attributes, "frontUrl", "absoluteUrl");
+  if (direct)
+    return direct.startsWith("http") ? direct : `https://oda.com${direct}`;
+  return `https://oda.com/no/products/${productId}/`;
 }
 
 export function parseCartResponse(data: WireCart): CartItem[] {
@@ -218,38 +280,24 @@ export function parseUser(nextData: unknown): User | null {
   return { email, firstName, lastName, fullName };
 }
 
-function toProduct(item: unknown): Product | null {
-  const attributes = readPath<Record<string, unknown>>(item, "attributes");
-  if (!attributes) return null;
-  const id =
-    readPath<number>(attributes, "id") ?? readPath<number>(item, "id") ?? 0;
+function toProduct(product: WireProduct): Product {
+  const id = product.id ?? 0;
   return {
     id,
-    name: firstString(attributes, "fullName", "name") ?? "Unknown",
-    subtitle: readPath<string>(attributes, "nameExtra") ?? "",
-    price: toFinite(readPath(attributes, "grossPrice")),
-    relativePrice: toFinite(readPath(attributes, "grossUnitPrice")),
-    relativePriceUnit: unitSuffix(
-      readPath(attributes, "unitPriceQuantityAbbreviation"),
-    ),
-    url: resolveProductUrl(attributes, id),
+    name: product.full_name ?? product.name ?? "Unknown Product",
+    subtitle: product.name_extra ?? "",
+    price: toFinite(product.gross_price),
+    relativePrice: toFinite(product.gross_unit_price),
+    relativePriceUnit: unitSuffix(product.unit_price_quantity_abbreviation),
+    url: resolveProductUrl(product, id),
   };
 }
 
-function toCartItem(item: unknown): CartItem {
-  const product = readPath<Record<string, unknown>>(item, "product") ?? {};
-  const id = readPath<number>(product, "id") ?? 0;
+function toCartItem(item: WireCartItem): CartItem {
+  const product = item.product;
   return {
-    id,
-    name: firstString(product, "full_name", "name") ?? "Unknown Product",
-    subtitle: readPath<string>(product, "name_extra") ?? "",
-    quantity: readPath<number>(item, "quantity") ?? 1,
-    price: toFinite(readPath(product, "gross_price")),
-    relativePrice: toFinite(readPath(product, "gross_unit_price")),
-    relativePriceUnit: unitSuffix(
-      readPath(product, "unit_price_quantity_abbreviation"),
-    ),
-    url: resolveProductUrl(product, id),
+    ...toProduct(product),
+    quantity: item.quantity,
   };
 }
 
@@ -287,20 +335,13 @@ function toLineItem(item: unknown, category: string): OrderLineItem | null {
 }
 
 /**
- * Resolve a product URL from whatever shape the source payload uses. Search
- * results expose `frontUrl`/`absoluteUrl` (camelCase), the cart REST API
- * exposes `front_url`/`absolute_url` (snake_case), and order line items
- * expose neither. Falls back to the canonical search-by-id URL when nothing
- * is provided so the agent always has a link.
+ * Resolve a product URL. REST endpoints (search, cart, product-list, product
+ * detail) expose `front_url` (absolute) and `absolute_url` (path-relative).
+ * Order line items expose neither, so we fall back to the canonical
+ * search-by-id URL.
  */
 function resolveProductUrl(source: unknown, productId: number): string {
-  const direct = firstString(
-    source,
-    "frontUrl",
-    "front_url",
-    "absoluteUrl",
-    "absolute_url",
-  );
+  const direct = firstString(source, "front_url", "absolute_url");
   if (direct)
     return direct.startsWith("http") ? direct : `https://oda.com${direct}`;
   return `https://oda.com/no/products/${productId}/`;

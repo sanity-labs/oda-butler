@@ -8,16 +8,18 @@ import type {
   WireOrdersResponse,
   WireProductList,
   WireProductListsPage,
+  WireSearchResponse,
 } from "./api-types.ts";
 import {
   parseCartResponse,
+  parseHtmlSearchPage,
   parseOrderDetail,
   parseOrdersResponse,
-  parseProductPage,
   parseRecurringListDetail,
   parseRecurringListsResponse,
   parseRecurringResponse,
   parseRecurringSchedule,
+  parseSearchResponse,
   parseUser,
 } from "./parsers.ts";
 import type {
@@ -31,6 +33,7 @@ import type {
   User,
 } from "./types.ts";
 
+const SEARCH_API = `${ODA_API_BASE}/api/v1/search/`;
 const CART_API = `${ODA_API_BASE}/api/v1/cart/`;
 const CART_ITEMS_API = `${ODA_API_BASE}/api/v1/cart/items/`;
 const RECURRING_API = `${ODA_API_BASE}/api/v1/cart/recurring/`;
@@ -67,12 +70,31 @@ export class OdaClient {
     }
   }
 
+  /**
+   * Search the catalog. Tries the REST search first; for multi-word queries
+   * with zero REST matches we retry against the HTML search page, which does
+   * intent matching the REST endpoint lacks (e.g. "snickers ice cream" →
+   * Snickers-Is). Single-word zero-result queries skip the fallback because
+   * the HTML page returns generic recommendations rather than a real "no
+   * results" signal, which would mislead the agent.
+   */
   async searchProducts(query: string, page = 1): Promise<ProductPage> {
-    const url = `${ODA_BASE_URL}/search/products/?q=${encodeURIComponent(query)}${
+    const restUrl = `${SEARCH_API}?q=${encodeURIComponent(query)}${
       page > 1 ? `&page=${page}` : ""
     }`;
-    const nextData = await this.#http.fetchNextData(url);
-    return parseProductPage(url, nextData);
+    const data = await this.#getJson<WireSearchResponse>(restUrl);
+    const rest = data
+      ? parseSearchResponse(restUrl, data, page)
+      : { pageUrl: restUrl, items: [], hasMore: false };
+    if (rest.items.length > 0 || query.trim().split(/\s+/).length < 2) {
+      return rest;
+    }
+
+    const htmlUrl = `${ODA_BASE_URL}/search/products/?q=${encodeURIComponent(query)}${
+      page > 1 ? `&page=${page}` : ""
+    }`;
+    const nextData = await this.#http.fetchNextData(htmlUrl);
+    return parseHtmlSearchPage(htmlUrl, nextData);
   }
 
   async getCart(): Promise<CartItem[]> {

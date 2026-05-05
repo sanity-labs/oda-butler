@@ -58,6 +58,290 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/user/logout/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sign out
+         * @description Clears the session on the server. Cookies become invalid.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Logged out */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/user/addresses/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the user's delivery addresses
+         * @description Returns an array of delivery addresses with delivery-area metadata
+         *     (whether the address is in Oda's coverage area, unattended-delivery
+         *     eligibility, coordinates, etc.).
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Delivery addresses */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["UserAddress"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/user/preferences/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the user's order preferences */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description User preferences */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["UserPreferences"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** Update the user's order preferences */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["UserPreferences"];
+                };
+            };
+            responses: {
+                /** @description Updated preferences */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["UserPreferences"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/search/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Product search (REST)
+         * @description Direct REST search. Returns up to 40 products per page along with
+         *     matching categories and a `total_hits` count. Pagination is via
+         *     `page` only; `limit` and `offset` are ignored.
+         *
+         *     **Caveat:** the REST search is more literal than the HTML
+         *     `/no/search/products/` page. Multi-word natural-language queries
+         *     like `"snickers ice cream"` return zero hits here even though the
+         *     HTML page resolves them via intent matching (→ Snickers-Is). For
+         *     production use cases that need fuzziness, fall back to the HTML
+         *     page when REST returns zero results.
+         */
+        get: {
+            parameters: {
+                query: {
+                    /** @description Search query (Norwegian or English; barcodes also work) */
+                    q: string;
+                    page?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Search results */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SearchResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/products/{product_id}/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a product by ID
+         * @description Returns the full product detail including alternative/related products,
+         *     categories, certifications, and detailed nutritional/origin info.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    product_id: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Product detail */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProductDetail"];
+                    };
+                };
+                /** @description Unknown product */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/brand/{brand_id}/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a brand with its categories and products */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    brand_id: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Brand details with category tree and product listings */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Brand"];
+                    };
+                };
+                /** @description Unknown brand */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/no/search/products/": {
         parameters: {
             query?: never;
@@ -66,18 +350,15 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Product search (HTML page with embedded JSON)
-         * @description Returns an HTML page. Product results are embedded in the
-         *     `__NEXT_DATA__` script tag under
-         *     `props.pageProps.dehydratedState.queries[]`, where `queryKey[0]._id`
-         *     is `"mixedSearch"` (or legacy `"searchpageresponse"`). Each `items[]`
-         *     entry has `type: "product"` (others — categories, banners — should
-         *     be skipped).
+         * Product search via HTML (legacy fallback)
+         * @description Returns an HTML page with product results embedded in `__NEXT_DATA__`
+         *     under `props.pageProps.dehydratedState.queries[]`, where
+         *     `queryKey[0]._id` is `"mixedSearch"` (legacy: `"searchpageresponse"`).
+         *     **Prefer `GET /api/v1/search/`**; this is documented for completeness.
          */
         get: {
             parameters: {
                 query: {
-                    /** @description Search query (Norwegian or English) */
                     q: string;
                     page?: number;
                 };
@@ -172,6 +453,42 @@ export interface paths {
             };
             responses: {
                 /** @description Updated cart */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Cart"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cart/clear/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Empty the cart */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Cart cleared */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -532,7 +849,7 @@ export interface components {
          * @example 234.00
          */
         Money: string;
-        /** @description Product as embedded in cart and product-list items. */
+        /** @description Product as embedded in cart, product-list, and search responses. */
         Product: {
             id?: number;
             full_name?: string;
@@ -540,6 +857,7 @@ export interface components {
             /** @description Size or descriptor suffix */
             name_extra?: string;
             brand?: string | null;
+            brand_id?: number | null;
             /** Format: uri */
             front_url?: string;
             /** @description Path-relative product URL */
@@ -548,8 +866,105 @@ export interface components {
             gross_unit_price?: components["schemas"]["Money"];
             /** @description e.g. `"kg"`, `"l"` */
             unit_price_quantity_abbreviation?: string;
+            /** @description e.g. `"liter"`, `"kilogram"` */
+            unit_price_quantity_name?: string;
             /** @example NOK */
             currency?: string;
+            availability?: components["schemas"]["ProductAvailability"];
+            discount?: components["schemas"]["ProductDiscount"] | null;
+            promotion?: Record<string, never> | null;
+            /** @description Certifications and labels (Nyt Norge, FSC, etc.). */
+            client_classifiers?: Record<string, never>[];
+            images?: Record<string, never>[];
+        };
+        ProductAvailability: {
+            is_available?: boolean;
+            /** @description e.g. "På lager", "Utsolgt" */
+            description?: string;
+            description_short?: string;
+            /** @description e.g. "in_stock", "sold_out" */
+            code?: string;
+        };
+        ProductDiscount: {
+            is_discounted?: boolean;
+            undiscounted_gross_price?: components["schemas"]["Money"];
+            undiscounted_gross_unit_price?: components["schemas"]["Money"];
+            discount_label?: string;
+            /** Format: date-time */
+            active_until?: string;
+        };
+        ProductDetail: components["schemas"]["Product"] & {
+            categories?: components["schemas"]["Category"][];
+            alternative_products?: components["schemas"]["Product"][];
+            related_products?: components["schemas"]["Product"][];
+            discount_mix_and_match_products?: components["schemas"]["Product"][];
+            bottle_deposit?: Record<string, never> | null;
+            /** @description Origin, nutritional info, ingredient declarations, etc. */
+            detailed_info?: Record<string, never>;
+            is_product_included_in_product_lists?: boolean;
+            is_restricted?: boolean;
+            restriction_age_limit?: number | null;
+        };
+        Category: {
+            id?: number;
+            name?: string;
+            parent?: number | null;
+            ordering?: number;
+            description?: string;
+            is_new?: boolean;
+            uri?: string;
+            children?: components["schemas"]["Category"][];
+            siblings?: Record<string, never>[];
+            products?: components["schemas"]["Product"][];
+            campaign_banners?: Record<string, never>[];
+        };
+        SearchResponse: {
+            attributes?: {
+                total_hits?: number;
+            };
+            products?: components["schemas"]["Product"][];
+            categories?: components["schemas"]["Category"][];
+        };
+        Brand: {
+            id?: number;
+            name?: string;
+            categories?: components["schemas"]["Category"][];
+        };
+        /** @description Delivery address with delivery-area metadata. */
+        UserAddress: {
+            user_delivery_address_id?: number;
+            /** @example Seilduksgata 9A */
+            address_display?: string;
+            /** @example 0553 */
+            zip_code?: string;
+            /** @example Oslo */
+            zip_place?: string;
+            address_extra?: string;
+            user_specified_name?: string | null;
+            user_instructions?: string;
+            is_primary?: boolean;
+            in_delivery_area?: boolean;
+            is_boat_delivery?: boolean | null;
+            coordinates?: {
+                /** Format: double */
+                lat?: number;
+                /** Format: double */
+                lng?: number;
+            };
+            is_unattended_delivery_available?: boolean;
+            is_unattended_delivery_enabled?: boolean;
+            prefers_unattended_delivery?: boolean;
+        };
+        UserPreferences: {
+            /** @description When true, missing items aren't substituted with similar products. */
+            exempt_from_product_substitution?: boolean;
+            /** @description When true, the user opts out of free product samples. */
+            exempt_from_product_sampling?: boolean;
+            /**
+             * @description Default portion count for recipe-based shopping.
+             * @example 2
+             */
+            preferred_recipe_portions?: number;
         };
         CartItem: {
             product: components["schemas"]["Product"];
@@ -633,6 +1048,18 @@ export interface components {
                 product_count?: number;
                 item_groups?: components["schemas"]["OrderItemGroup"][];
             };
+            /** @description Key-value pairs shown on the order detail page (delivery info, totals, etc.). */
+            info?: {
+                key?: string;
+                title?: string;
+                content?: string;
+            }[];
+            /** @description Recipes ordered alongside this order. */
+            recipes?: Record<string, never>[];
+            dinner_lists?: Record<string, never>[];
+            active_survey_id?: number | null;
+            /** @description Reorder options, complaint flow, share URL, etc. */
+            options?: Record<string, never>;
         };
         /**
          * @description Recurring schedule attached to a product list. `edit_url` carries

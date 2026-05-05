@@ -3,45 +3,29 @@ import {
   parseCartResponse,
   parseOrderDetail,
   parseOrdersResponse,
-  parseProductPage,
   parseRecurringListDetail,
   parseRecurringListsResponse,
   parseRecurringResponse,
+  parseSearchResponse,
   parseUser,
 } from "./parsers.ts";
 
-const productPageNextData = {
-  props: {
-    pageProps: {
-      dehydratedState: {
-        queries: [
-          {
-            queryKey: [{ _id: "mixedSearch", query: { q: "melk" } }],
-            state: {
-              data: {
-                attributes: { hasMoreItems: true, items: 40, page: 1 },
-                items: [
-                  {
-                    id: 8143,
-                    type: "product",
-                    attributes: {
-                      id: 8143,
-                      fullName: "Tine Lettmelk 1% fett",
-                      nameExtra: "1% fett, 1,75 l",
-                      grossPrice: "31.90",
-                      grossUnitPrice: "18.23",
-                      unitPriceQuantityAbbreviation: "l",
-                    },
-                  },
-                  { id: 999, type: "category", attributes: { name: "Drikke" } },
-                ],
-              },
-            },
-          },
-        ],
-      },
+const searchResponse = {
+  attributes: { total_hits: 197 },
+  products: [
+    {
+      id: 8143,
+      full_name: "Tine Lettmelk 1% fett",
+      name: "Tine Lettmelk",
+      name_extra: "1% fett, 1,75 l",
+      gross_price: "31.90",
+      gross_unit_price: "18.23",
+      unit_price_quantity_abbreviation: "l",
+      front_url: "https://oda.com/no/products/8143-tine-tine-lettmelk-1-fett/",
+      currency: "NOK",
     },
-  },
+  ],
+  categories: [],
 };
 
 const cartResponse = {
@@ -139,8 +123,8 @@ const userNextData = {
   },
 };
 
-test("parseProductPage skips non-product items and reads attributes", () => {
-  const result = parseProductPage("https://oda.com/x", productPageNextData);
+test("parseSearchResponse maps REST products and flags pagination", () => {
+  const result = parseSearchResponse("https://oda.com/x", searchResponse, 1);
   expect(result.items).toHaveLength(1);
   expect(result.items[0]).toMatchObject({
     id: 8143,
@@ -314,9 +298,26 @@ test("parseUser falls back to email when name is missing", () => {
   expect(user?.fullName).toBe("noname@example.com");
 });
 
-test("parseProductPage returns empty result for missing data", () => {
-  const result = parseProductPage("https://oda.com/x", null);
+test("parseSearchResponse handles empty result", () => {
+  const result = parseSearchResponse(
+    "https://oda.com/x",
+    { attributes: { total_hits: 0 }, products: [], categories: [] },
+    1,
+  );
   expect(result.items).toEqual([]);
+  expect(result.hasMore).toBe(false);
+});
+
+test("parseSearchResponse hasMore is false on the last page", () => {
+  const result = parseSearchResponse(
+    "https://oda.com/x",
+    {
+      attributes: { total_hits: 1 },
+      products: searchResponse.products,
+      categories: [],
+    },
+    1,
+  );
   expect(result.hasMore).toBe(false);
 });
 

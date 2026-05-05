@@ -20,9 +20,11 @@ servers:
 
 tags:
   - name: auth
-    description: Session login
+    description: Session login and logout
+  - name: user
+    description: Account details (addresses, preferences)
   - name: products
-    description: Product catalog (search results live in Next.js page data, not REST)
+    description: Product catalog (REST search + product detail + brand)
   - name: cart
     description: One-off shopping cart (consumer)
   - name: orders
@@ -54,23 +56,139 @@ paths:
         "200": { description: Authenticated; session cookies set on response }
         "400": { description: Invalid credentials }
 
-  /no/search/products/:
+  /api/v1/user/logout/:
+    post:
+      tags: [auth]
+      summary: Sign out
+      description: Clears the session on the server. Cookies become invalid.
+      responses:
+        "200": { description: Logged out }
+
+  /api/v1/user/addresses/:
+    get:
+      tags: [user]
+      summary: List the user's delivery addresses
+      description: |
+        Returns an array of delivery addresses with delivery-area metadata
+        (whether the address is in Oda's coverage area, unattended-delivery
+        eligibility, coordinates, etc.).
+      responses:
+        "200":
+          description: Delivery addresses
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/UserAddress" }
+
+  /api/v1/user/preferences/:
+    get:
+      tags: [user]
+      summary: Get the user's order preferences
+      responses:
+        "200":
+          description: User preferences
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserPreferences" }
+    post:
+      tags: [user]
+      summary: Update the user's order preferences
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UserPreferences" }
+      responses:
+        "200":
+          description: Updated preferences
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserPreferences" }
+
+  /api/v1/search/:
     get:
       tags: [products]
-      summary: Product search (HTML page with embedded JSON)
+      summary: Product search (REST)
       description: |
-        Returns an HTML page. Product results are embedded in the
-        `__NEXT_DATA__` script tag under
-        `props.pageProps.dehydratedState.queries[]`, where `queryKey[0]._id`
-        is `"mixedSearch"` (or legacy `"searchpageresponse"`). Each `items[]`
-        entry has `type: "product"` (others — categories, banners — should
-        be skipped).
+        Direct REST search. Returns up to 40 products per page along with
+        matching categories and a `total_hits` count. Pagination is via
+        `page` only; `limit` and `offset` are ignored.
+
+        **Caveat:** the REST search is more literal than the HTML
+        `/no/search/products/` page. Multi-word natural-language queries
+        like `"snickers ice cream"` return zero hits here even though the
+        HTML page resolves them via intent matching (→ Snickers-Is). For
+        production use cases that need fuzziness, fall back to the HTML
+        page when REST returns zero results.
       parameters:
         - in: query
           name: q
           required: true
           schema: { type: string }
-          description: Search query (Norwegian or English)
+          description: Search query (Norwegian or English; barcodes also work)
+        - in: query
+          name: page
+          required: false
+          schema: { type: integer, minimum: 1, default: 1 }
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SearchResponse" }
+
+  /api/v1/products/{product_id}/:
+    get:
+      tags: [products]
+      summary: Get a product by ID
+      description: |
+        Returns the full product detail including alternative/related products,
+        categories, certifications, and detailed nutritional/origin info.
+      parameters:
+        - in: path
+          name: product_id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Product detail
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProductDetail" }
+        "404": { description: Unknown product }
+
+  /api/v1/brand/{brand_id}/:
+    get:
+      tags: [products]
+      summary: Get a brand with its categories and products
+      parameters:
+        - in: path
+          name: brand_id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Brand details with category tree and product listings
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Brand" }
+        "404": { description: Unknown brand }
+
+  /no/search/products/:
+    get:
+      tags: [products]
+      summary: Product search via HTML (legacy fallback)
+      description: |
+        Returns an HTML page with product results embedded in `__NEXT_DATA__`
+        under `props.pageProps.dehydratedState.queries[]`, where
+        `queryKey[0]._id` is `"mixedSearch"` (legacy: `"searchpageresponse"`).
+        **Prefer `GET /api/v1/search/`**; this is documented for completeness.
+      parameters:
+        - in: query
+          name: q
+          required: true
+          schema: { type: string }
         - in: query
           name: page
           required: false
@@ -82,7 +200,6 @@ paths:
             text/html:
               schema:
                 type: string
-                description: HTML containing `<script id="__NEXT_DATA__">…</script>`
 
   /api/v1/cart/:
     get:
@@ -116,6 +233,17 @@ paths:
       responses:
         "200":
           description: Updated cart
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Cart" }
+
+  /api/v1/cart/clear/:
+    post:
+      tags: [cart]
+      summary: Empty the cart
+      responses:
+        "200":
+          description: Cart cleared
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Cart" }
@@ -295,13 +423,14 @@ components:
 
     Product:
       type: object
-      description: Product as embedded in cart and product-list items.
+      description: Product as embedded in cart, product-list, and search responses.
       properties:
         id: { type: integer }
         full_name: { type: string }
         name: { type: string }
         name_extra: { type: string, description: Size or descriptor suffix }
         brand: { type: string, nullable: true }
+        brand_id: { type: integer, nullable: true }
         front_url: { type: string, format: uri }
         absolute_url: { type: string, description: Path-relative product URL }
         gross_price: { $ref: "#/components/schemas/Money" }
@@ -309,7 +438,172 @@ components:
         unit_price_quantity_abbreviation:
           type: string
           description: e.g. `"kg"`, `"l"`
+        unit_price_quantity_name:
+          type: string
+          description: e.g. `"liter"`, `"kilogram"`
         currency: { type: string, example: NOK }
+        availability:
+          $ref: "#/components/schemas/ProductAvailability"
+        discount:
+          oneOf:
+            - { $ref: "#/components/schemas/ProductDiscount" }
+            - { type: "null" }
+        promotion:
+          oneOf:
+            - { type: object }
+            - { type: "null" }
+        client_classifiers:
+          type: array
+          description: Certifications and labels (Nyt Norge, FSC, etc.).
+          items: { type: object }
+        images:
+          type: array
+          items: { type: object }
+
+    ProductAvailability:
+      type: object
+      properties:
+        is_available: { type: boolean }
+        description:
+          type: string
+          description: 'e.g. "På lager", "Utsolgt"'
+        description_short: { type: string }
+        code:
+          type: string
+          description: 'e.g. "in_stock", "sold_out"'
+
+    ProductDiscount:
+      type: object
+      properties:
+        is_discounted: { type: boolean }
+        undiscounted_gross_price: { $ref: "#/components/schemas/Money" }
+        undiscounted_gross_unit_price: { $ref: "#/components/schemas/Money" }
+        discount_label: { type: string }
+        active_until: { type: string, format: date-time }
+
+    ProductDetail:
+      allOf:
+        - { $ref: "#/components/schemas/Product" }
+        - type: object
+          description: Extra fields returned by `GET /api/v1/products/{id}/`.
+          properties:
+            categories:
+              type: array
+              items: { $ref: "#/components/schemas/Category" }
+            alternative_products:
+              type: array
+              items: { $ref: "#/components/schemas/Product" }
+            related_products:
+              type: array
+              items: { $ref: "#/components/schemas/Product" }
+            discount_mix_and_match_products:
+              type: array
+              items: { $ref: "#/components/schemas/Product" }
+            bottle_deposit:
+              oneOf:
+                - { type: object }
+                - { type: "null" }
+            detailed_info:
+              type: object
+              description: Origin, nutritional info, ingredient declarations, etc.
+            is_product_included_in_product_lists: { type: boolean }
+            is_restricted: { type: boolean }
+            restriction_age_limit:
+              oneOf:
+                - { type: integer }
+                - { type: "null" }
+
+    Category:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        parent:
+          oneOf:
+            - { type: integer }
+            - { type: "null" }
+        ordering: { type: integer }
+        description: { type: string }
+        is_new: { type: boolean }
+        uri: { type: string }
+        children:
+          type: array
+          items: { $ref: "#/components/schemas/Category" }
+        siblings:
+          type: array
+          items: { type: object }
+        products:
+          type: array
+          items: { $ref: "#/components/schemas/Product" }
+        campaign_banners:
+          type: array
+          items: { type: object }
+
+    SearchResponse:
+      type: object
+      properties:
+        attributes:
+          type: object
+          properties:
+            total_hits: { type: integer }
+        products:
+          type: array
+          items: { $ref: "#/components/schemas/Product" }
+        categories:
+          type: array
+          items: { $ref: "#/components/schemas/Category" }
+
+    Brand:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        categories:
+          type: array
+          items: { $ref: "#/components/schemas/Category" }
+
+    UserAddress:
+      type: object
+      description: Delivery address with delivery-area metadata.
+      properties:
+        user_delivery_address_id: { type: integer }
+        address_display: { type: string, example: "Seilduksgata 9A" }
+        zip_code: { type: string, example: "0553" }
+        zip_place: { type: string, example: "Oslo" }
+        address_extra: { type: string }
+        user_specified_name:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
+        user_instructions: { type: string }
+        is_primary: { type: boolean }
+        in_delivery_area: { type: boolean }
+        is_boat_delivery:
+          oneOf:
+            - { type: boolean }
+            - { type: "null" }
+        coordinates:
+          type: object
+          properties:
+            lat: { type: number, format: double }
+            lng: { type: number, format: double }
+        is_unattended_delivery_available: { type: boolean }
+        is_unattended_delivery_enabled: { type: boolean }
+        prefers_unattended_delivery: { type: boolean }
+
+    UserPreferences:
+      type: object
+      properties:
+        exempt_from_product_substitution:
+          type: boolean
+          description: When true, missing items aren't substituted with similar products.
+        exempt_from_product_sampling:
+          type: boolean
+          description: When true, the user opts out of free product samples.
+        preferred_recipe_portions:
+          type: integer
+          description: Default portion count for recipe-based shopping.
+          example: 2
 
     CartItem:
       type: object
@@ -422,6 +716,29 @@ components:
             item_groups:
               type: array
               items: { $ref: "#/components/schemas/OrderItemGroup" }
+        info:
+          type: array
+          description: Key-value pairs shown on the order detail page (delivery info, totals, etc.).
+          items:
+            type: object
+            properties:
+              key: { type: string }
+              title: { type: string }
+              content: { type: string }
+        recipes:
+          type: array
+          description: Recipes ordered alongside this order.
+          items: { type: object }
+        dinner_lists:
+          type: array
+          items: { type: object }
+        active_survey_id:
+          oneOf:
+            - { type: integer }
+            - { type: "null" }
+        options:
+          type: object
+          description: Reorder options, complaint flow, share URL, etc.
 
     RecurringOrderMeta:
       type: object

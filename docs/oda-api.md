@@ -9,9 +9,16 @@ The wire shapes (request bodies, response payloads, error formats) are described
 - `POST /api/v1/user/login/` returns the `csrftoken` and `sessionid` cookies. To get an initial CSRF cookie, GET any HTML page first (e.g. `/no/user/login/`).
 - Mutations require `X-CSRFToken: <csrftoken>`, `Origin: https://oda.com`, and a same-origin `Referer`.
 
-## Products
+## Products and search
 
-There is no public products REST endpoint. Search results are embedded in the HTML response from `/no/search/products/` inside `<script id="__NEXT_DATA__">`. Look under `props.pageProps.dehydratedState.queries[]` for the entry whose `queryKey[0]._id` is `"mixedSearch"` (legacy: `"searchpageresponse"`). Each `items[]` entry has `type: "product"`; categories and banners interleave and should be skipped.
+There are two search surfaces:
+
+- **REST** (`GET /api/v1/search/?q={q}&page={n}`) returns `{attributes:{total_hits}, products[], categories[]}`. Snake-case product shape, same as cart items. Pagination via `page` only (`limit`/`offset` are ignored). 40 products per page.
+- **HTML** (`GET /no/search/products/?q=...`) embeds results in `__NEXT_DATA__` under the `"mixedSearch"` (or legacy `"searchpageresponse"`) dehydrated query. CamelCase product shape, nested under `attributes`.
+
+The REST search is _more literal_. Multi-word queries like `"snickers ice cream"` return zero hits there even though the HTML page resolves them via intent matching (→ Snickers-Is). The HTML page also surfaces "alternative suggestions" on a true miss — it doesn't return zero results cleanly — so it should only be used as a fallback when the REST result is empty _and_ the query has multiple words.
+
+Direct product lookup is available at `GET /api/v1/products/{id}/` and brand pages at `GET /api/v1/brand/{id}/` (categories with embedded products).
 
 ## Next delivery
 
@@ -36,6 +43,17 @@ Schedule fields (`frequency`, `weekday`, `next_date`) live on `recurring_order`.
 - `delivery_offering_id` is opaque
 
 Mutations go through `POST /api/v1/product-lists/{id}/products/` with a _top-level array_ of signed deltas (not `{ items: [...] }` like the cart). `OPTIONS` returns 405 with `Allow: POST`. The endpoint accepts changes to lists with or without an active recurring schedule.
+
+## User account
+
+- `GET /api/v1/user/addresses/` — array of delivery addresses with delivery-area metadata (coordinates, unattended-delivery flags, etc.).
+- `GET /api/v1/user/preferences/` — substitution opt-out, sampling opt-out, default recipe portions. `POST` to update.
+- `POST /api/v1/user/logout/` — explicit logout. Cookies become invalid server-side.
+
+## Discovery quirks
+
+- `OPTIONS` returns `405 Allow: <verbs>` on every endpoint, which makes verb discovery cheap when reverse-engineering new paths.
+- `404` responses come back as the full Next.js HTML 404 page (≈180 KB), not JSON. Parse defensively.
 
 ## Useful HTML pages (Next.js data)
 
