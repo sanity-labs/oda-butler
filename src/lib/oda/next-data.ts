@@ -1,5 +1,5 @@
-import { get } from "es-toolkit/compat";
 import { isPlainObject } from "es-toolkit";
+import { get } from "es-toolkit/compat";
 
 /**
  * Typed wrapper around `es-toolkit/compat/get`. The compat overloads collapse

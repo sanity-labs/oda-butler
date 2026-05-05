@@ -1,9 +1,9 @@
-import { Agent } from "@mastra/core/agent";
 import { createSlackAdapter, type SlackAdapter } from "@chat-adapter/slack";
+import { Agent } from "@mastra/core/agent";
 import type { Message, Thread } from "chat";
 import { ODA_SYSTEM_PROMPT } from "./instructions.ts";
-import { asStreamingPlan } from "./streaming.ts";
 import { memory } from "./memory.ts";
+import { asStreamingPlan } from "./streaming.ts";
 import { getProduct, searchProducts } from "./tools/products.ts";
 import {
   getRecurringOrder,

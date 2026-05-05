@@ -1,7 +1,3 @@
-import { CookieJar } from "./cookie-jar.ts";
-import { type Credentials, loadCredentials } from "./credentials.ts";
-import { ensureOk, extractListError } from "./errors.ts";
-import { ODA_API_BASE, ODA_BASE_URL, OdaTransport } from "./http.ts";
 import type {
   WireCart,
   WireOrderDetail,
@@ -11,6 +7,10 @@ import type {
   WireProductListsPage,
   WireSearchResponse,
 } from "./api-types.ts";
+import { CookieJar } from "./cookie-jar.ts";
+import { type Credentials, loadCredentials } from "./credentials.ts";
+import { ensureOk, extractListError } from "./errors.ts";
+import { ODA_API_BASE, ODA_BASE_URL, OdaTransport } from "./http.ts";
 import {
   parseCartResponse,
   parseHtmlSearchPage,

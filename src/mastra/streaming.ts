@@ -1,5 +1,5 @@
-import { StreamingPlan, type StreamChunk } from "chat";
 import type { ChunkType } from "@mastra/core/stream";
+import { type StreamChunk, StreamingPlan } from "chat";
 
 type AgentStream = AsyncIterable<ChunkType>;
 
@@ -51,7 +51,6 @@ async function* toChatChunks(
         title: humanize(chunk.payload.toolName, asArgs(chunk.payload.args)),
         status: chunk.payload.isError ? "error" : "complete",
       };
-      continue;
     }
   }
 }

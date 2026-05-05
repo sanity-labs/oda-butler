@@ -14,8 +14,7 @@ function makeJar(): CookieJar {
 
 const ok = (status = 200) =>
   new Response(JSON.stringify({ ok: true }), { status });
-const expired = () =>
-  new Response("nope", { status: 401 });
+const expired = () => new Response("nope", { status: 401 });
 
 beforeEach(() => {
   originalFetch = globalThis.fetch;
@@ -61,9 +60,7 @@ test("gives up if relogin returns false", async () => {
 });
 
 test("gives up if retry also fails with 401", async () => {
-  mockFetch
-    .mockResolvedValueOnce(expired())
-    .mockResolvedValueOnce(expired());
+  mockFetch.mockResolvedValueOnce(expired()).mockResolvedValueOnce(expired());
   const transport = new OdaTransport(makeJar());
   transport.setReloginHook(async () => true);
 

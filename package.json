@@ -9,12 +9,15 @@
     "manifest": "bun run scripts/generate-manifest.ts",
     "deploy": "bun run scripts/deploy.ts",
     "gen:api-types": "openapi-typescript docs/oda-openapi.yaml -o src/lib/oda/api-types.generated.ts",
+    "format": "biome check --write .",
+    "check": "biome check .",
     "test": "vitest run",
     "oda:login": "bun run scripts/oda-auth.ts login",
     "oda:logout": "bun run scripts/oda-auth.ts logout",
     "oda:whoami": "bun run scripts/oda-auth.ts whoami"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.4.14",
     "@types/bun": "latest",
     "openapi-typescript": "^7.13.0",
     "vitest": "^4.1.5"
