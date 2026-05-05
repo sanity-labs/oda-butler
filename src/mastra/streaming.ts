@@ -4,11 +4,18 @@ import type { ChunkType } from "@mastra/core/stream";
 type AgentStream = AsyncIterable<ChunkType>;
 
 const TOOL_LABELS: Record<string, (args: Record<string, unknown>) => string> = {
-  products_search: (a) => `Searching for "${stringArg(a, "query")}"`,
-  orders_list: () => "Fetching past orders",
-  order_get_details: (a) => `Reading order ${stringArg(a, "orderNumber")}`,
-  next_delivery_get: () => "Checking next delivery",
-  recurring_get: () => "Reading recurring order",
+  search_products: (a) => `Searching for "${stringArg(a, "query")}"`,
+  list_orders: () => "Fetching past orders",
+  get_order: (a) => `Reading order ${stringArg(a, "orderNumber")}`,
+  get_next_delivery: () => "Checking next delivery",
+  get_recurring_order: () => "Reading recurring order",
+  update_recurring_item: (a) => {
+    const qty = a.quantity;
+    return typeof qty === "number"
+      ? `Updating recurring (qty ${qty})`
+      : "Updating recurring";
+  },
+  remove_recurring_item: () => "Removing from recurring",
 };
 
 /**

@@ -4,13 +4,13 @@ import type { Message, Thread } from "chat";
 import { ODA_SYSTEM_PROMPT } from "./instructions.ts";
 import { asStreamingPlan } from "./streaming.ts";
 import { memory } from "./memory.ts";
+import { getNextDelivery, getOrder, listOrders } from "./tools/orders.ts";
+import { searchProducts } from "./tools/products.ts";
 import {
-  nextDeliveryGet,
-  orderGetDetails,
-  ordersList,
-} from "./tools/orders.ts";
-import { productsSearch } from "./tools/products.ts";
-import { recurringGet } from "./tools/recurring.ts";
+  getRecurringOrder,
+  removeRecurringItem,
+  updateRecurringItem,
+} from "./tools/recurring.ts";
 
 /**
  * Mastra DB-shape message. Required for Mastra to honor our supplied `id`
@@ -136,11 +136,13 @@ export const odaAgent = new Agent({
   model: "anthropic/claude-opus-4-6",
   memory,
   tools: {
-    products_search: productsSearch,
-    orders_list: ordersList,
-    order_get_details: orderGetDetails,
-    next_delivery_get: nextDeliveryGet,
-    recurring_get: recurringGet,
+    search_products: searchProducts,
+    list_orders: listOrders,
+    get_order: getOrder,
+    get_next_delivery: getNextDelivery,
+    get_recurring_order: getRecurringOrder,
+    update_recurring_item: updateRecurringItem,
+    remove_recurring_item: removeRecurringItem,
   },
   channels: {
     adapters: {

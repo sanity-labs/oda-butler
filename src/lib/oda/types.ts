@@ -85,6 +85,14 @@ export type RecurringList = {
   schedule: RecurringSchedule | null;
 };
 
+export type RecurringQuantityChange = {
+  list: RecurringList;
+  productId: number;
+  name: string | null;
+  previousQuantity: number;
+  quantity: number;
+};
+
 export type User = {
   email: string;
   firstName?: string;

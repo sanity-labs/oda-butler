@@ -1,6 +1,6 @@
 import { CookieJar } from "./cookie-jar.ts";
 import { type Credentials, loadCredentials } from "./credentials.ts";
-import { ensureOk } from "./errors.ts";
+import { ensureOk, extractListError } from "./errors.ts";
 import { ODA_API_BASE, ODA_BASE_URL, OdaTransport } from "./http.ts";
 import {
   parseCartResponse,
@@ -19,6 +19,7 @@ import type {
   ProductPage,
   RecurringList,
   RecurringOrder,
+  RecurringQuantityChange,
   User,
 } from "./types.ts";
 
@@ -150,6 +151,79 @@ export class OdaClient {
       `${ODA_BASE_URL}/recurring/`,
     );
     await ensureOk(response, "Remove from recurring");
+  }
+
+  /**
+   * Apply signed-delta quantity changes to a product list. Positive deltas add
+   * (or create entries), negative deltas remove (clamped at 0). Returns the
+   * full updated list. Throws on 4xx with the server's error message.
+   *
+   * Body shape is a top-level array, not `{ items: [...] }` like the cart.
+   */
+  async updateProductListItems(
+    listId: number,
+    deltas: Array<{ productId: number; delta: number }>,
+  ): Promise<RecurringList> {
+    const url = `${PRODUCT_LISTS_API}${listId}/products/`;
+    const referer = `${ODA_BASE_URL}/account/lists/details/${listId}/`;
+    const body = deltas.map(({ productId, delta }) => ({
+      product_id: productId,
+      quantity: delta,
+    }));
+    const response = await this.#http.postJson(url, body, referer);
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      throw new Error(extractListError(text, response.status));
+    }
+    const data = await response.json();
+    return parseRecurringListDetail(
+      data,
+      parseRecurringListsResponse({ results: [data] })?.schedule ?? null,
+    );
+  }
+
+  /**
+   * Set a product to an exact target quantity on the active recurring list.
+   * Idempotent: calling with `quantity: 3` always lands on 3, regardless of
+   * the previous state. Quantity 0 removes the product. Throws when there
+   * is no active recurring list on the account.
+   */
+  async setRecurringQuantity(
+    productId: number,
+    quantity: number,
+  ): Promise<RecurringQuantityChange> {
+    if (quantity < 0 || !Number.isInteger(quantity)) {
+      throw new Error("quantity must be a non-negative integer");
+    }
+    const list = await this.getRecurringList();
+    if (!list) {
+      throw new Error(
+        "This account has no active recurring order, so quantities can't be set.",
+      );
+    }
+    const before = list.items.find((i) => i.id === productId);
+    const previousQuantity = before?.quantity ?? 0;
+    const delta = quantity - previousQuantity;
+    if (delta === 0) {
+      return {
+        list,
+        productId,
+        name: before?.name ?? null,
+        previousQuantity,
+        quantity,
+      };
+    }
+    const updated = await this.updateProductListItems(list.id, [
+      { productId, delta },
+    ]);
+    const after = updated.items.find((i) => i.id === productId);
+    return {
+      list: updated,
+      productId,
+      name: after?.name ?? before?.name ?? null,
+      previousQuantity,
+      quantity: after?.quantity ?? 0,
+    };
   }
 
   /**
