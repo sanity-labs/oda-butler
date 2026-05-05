@@ -2,6 +2,7 @@ import { createSlackAdapter, type SlackAdapter } from "@chat-adapter/slack";
 import { Agent } from "@mastra/core/agent";
 import type { Message, Thread } from "chat";
 import { requireEnv } from "../lib/env.ts";
+import { logger } from "../lib/logger.ts";
 import {
   ALLOWED_CHANNELS,
   HISTORY_LIMIT,
@@ -38,26 +39,40 @@ async function rejectChannel(thread: Thread): Promise<void> {
  * agent has full context, including earlier messages from anyone.
  */
 async function handleMention(thread: Thread, message: Message): Promise<void> {
-  if (!(await isAllowedChannel(thread))) {
-    await rejectChannel(thread);
-    return;
+  try {
+    if (!(await isAllowedChannel(thread))) {
+      await rejectChannel(thread);
+      return;
+    }
+
+    const messages = await buildConversation(thread, message);
+    if (messages.length === 0) {
+      await thread.post("You rang? Tell me what you need.");
+      return;
+    }
+
+    await setLoadingStatus(thread);
+
+    const stream = await odaAgent.stream(messages, {
+      memory: {
+        thread: { id: thread.id, resourceId: `slack:${thread.channelId}` },
+        resource: `slack:${thread.channelId}`,
+      },
+    });
+    await thread.post(asStreamingPlan(stream.fullStream));
+  } catch (err) {
+    logger.error("mention handler failed", {
+      channelId: thread.channelId,
+      threadId: thread.id,
+      messageId: message.id,
+      error: err,
+    });
+    await thread
+      .post("Something broke on my end. Try again in a sec, or check the logs.")
+      .catch(() => {
+        // Posting the apology might fail too (transport down). Nothing more to do.
+      });
   }
-
-  const messages = await buildConversation(thread, message);
-  if (messages.length === 0) {
-    await thread.post("You rang? Tell me what you need.");
-    return;
-  }
-
-  await setLoadingStatus(thread);
-
-  const stream = await odaAgent.stream(messages, {
-    memory: {
-      thread: { id: thread.id, resourceId: `slack:${thread.channelId}` },
-      resource: `slack:${thread.channelId}`,
-    },
-  });
-  await thread.post(asStreamingPlan(stream.fullStream));
 }
 
 /**
@@ -126,8 +141,12 @@ async function setLoadingStatus(thread: Thread): Promise<void> {
       "is shopping…",
       LOADING_MESSAGES,
     );
-  } catch {
-    // Non-critical; if Slack rejects we still continue.
+  } catch (err) {
+    logger.warn("failed to set loading status", {
+      channelId: thread.channelId,
+      threadId: thread.id,
+      error: err,
+    });
   }
 }
 

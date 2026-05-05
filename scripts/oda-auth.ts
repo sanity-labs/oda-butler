@@ -48,7 +48,7 @@ function parseFlags(input: string[]): Record<string, string> {
   for (let i = 0; i < input.length; i += 2) {
     const key = input[i];
     const value = input[i + 1];
-    if (!key || !key.startsWith("--") || value == null) continue;
+    if (!key?.startsWith("--") || value == null) continue;
     out[key.slice(2)] = value;
   }
   return out;
@@ -98,7 +98,7 @@ Commands:
   logout                                    Remove stored session
   whoami                                    Show current user
 Environment:
-  SANITY_ODA_DATA_DIR  Override the cookie store directory (default: ~/.sanity-oda)
+  SANITY_ODA_DATA_DIR  Override the cookie store directory (default: <project>/data/)
   ODA_EMAIL            Default email for login
   ODA_PASSWORD         Default password for login`);
 }

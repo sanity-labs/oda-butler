@@ -17,7 +17,7 @@ export class CookieJar {
   }
 
   csrfToken(): string | null {
-    return this.#cookies["csrftoken"] ?? null;
+    return this.#cookies.csrftoken ?? null;
   }
 
   ingest(response: Response): void {
