@@ -4,18 +4,13 @@ import type { Message, Thread } from "chat";
 import { ODA_SYSTEM_PROMPT } from "./instructions.ts";
 import { asStreamingPlan } from "./streaming.ts";
 import { memory } from "./memory.ts";
-import { cartAddProduct, cartGet, cartRemoveProduct } from "./tools/cart.ts";
 import {
   nextDeliveryGet,
   orderGetDetails,
   ordersList,
 } from "./tools/orders.ts";
 import { productsSearch } from "./tools/products.ts";
-import {
-  recurringAddProduct,
-  recurringGet,
-  recurringRemoveProduct,
-} from "./tools/recurring.ts";
+import { recurringGet } from "./tools/recurring.ts";
 
 /**
  * Mastra DB-shape message. Required for Mastra to honor our supplied `id`
@@ -142,15 +137,10 @@ export const odaAgent = new Agent({
   memory,
   tools: {
     products_search: productsSearch,
-    cart_get: cartGet,
-    cart_add_product: cartAddProduct,
-    cart_remove_product: cartRemoveProduct,
     orders_list: ordersList,
     order_get_details: orderGetDetails,
     next_delivery_get: nextDeliveryGet,
     recurring_get: recurringGet,
-    recurring_add_product: recurringAddProduct,
-    recurring_remove_product: recurringRemoveProduct,
   },
   channels: {
     adapters: {

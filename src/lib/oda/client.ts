@@ -7,6 +7,8 @@ import {
   parseOrderDetail,
   parseOrdersResponse,
   parseProductPage,
+  parseRecurringListDetail,
+  parseRecurringListsResponse,
   parseRecurringResponse,
   parseUser,
 } from "./parsers.ts";
@@ -15,6 +17,7 @@ import type {
   Order,
   OrderDetails,
   ProductPage,
+  RecurringList,
   RecurringOrder,
   User,
 } from "./types.ts";
@@ -23,6 +26,7 @@ const CART_API = `${ODA_API_BASE}/api/v1/cart/`;
 const CART_ITEMS_API = `${ODA_API_BASE}/api/v1/cart/items/`;
 const RECURRING_API = `${ODA_API_BASE}/api/v1/cart/recurring/`;
 const RECURRING_ITEMS_API = `${ODA_API_BASE}/api/v1/cart/recurring/items/`;
+const PRODUCT_LISTS_API = `${ODA_API_BASE}/api/v1/product-lists/`;
 const ORDERS_API = `${ODA_API_BASE}/api/v1/orders/`;
 const LOGIN_API = `${ODA_API_BASE}/api/v1/user/login/`;
 
@@ -106,6 +110,24 @@ export class OdaClient {
   async getRecurringOrder(): Promise<RecurringOrder> {
     const data = await this.#getJson(RECURRING_API);
     return data ? parseRecurringResponse(data) : { productCount: 0, items: [] };
+  }
+
+  /**
+   * B2B accounts manage their recurring order as a product list. The list
+   * index gives us schedule metadata (`next_date`, frequency, weekday); we
+   * fetch the list detail separately to get full item data with prices.
+   * Returns null when no list has an active recurring order.
+   */
+  async getRecurringList(): Promise<RecurringList | null> {
+    const indexData = await this.#getJson(PRODUCT_LISTS_API);
+    const summary = indexData ? parseRecurringListsResponse(indexData) : null;
+    if (!summary) return null;
+
+    const detailData = await this.#getJson(
+      `${PRODUCT_LISTS_API}${summary.id}/`,
+    );
+    if (!detailData) return summary;
+    return parseRecurringListDetail(detailData, summary.schedule);
   }
 
   async addToRecurring(productId: number, quantity = 1): Promise<void> {

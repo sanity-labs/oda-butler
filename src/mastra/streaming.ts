@@ -5,15 +5,10 @@ type AgentStream = AsyncIterable<ChunkType>;
 
 const TOOL_LABELS: Record<string, (args: Record<string, unknown>) => string> = {
   products_search: (a) => `Searching for "${stringArg(a, "query")}"`,
-  cart_get: () => "Reading the cart",
-  cart_add_product: () => "Adding to cart",
-  cart_remove_product: () => "Removing from cart",
   orders_list: () => "Fetching past orders",
   order_get_details: (a) => `Reading order ${stringArg(a, "orderNumber")}`,
   next_delivery_get: () => "Checking next delivery",
   recurring_get: () => "Reading recurring order",
-  recurring_add_product: () => "Adding to recurring",
-  recurring_remove_product: () => "Removing from recurring",
 };
 
 /**

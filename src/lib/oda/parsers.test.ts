@@ -4,6 +4,8 @@ import {
   parseOrderDetail,
   parseOrdersResponse,
   parseProductPage,
+  parseRecurringListDetail,
+  parseRecurringListsResponse,
   parseRecurringResponse,
   parseUser,
 } from "./parsers.ts";
@@ -165,6 +167,81 @@ test("parseRecurringResponse uses cart item parsing", () => {
   const recurring = parseRecurringResponse(cartResponse);
   expect(recurring.productCount).toBe(2);
   expect(recurring.items).toHaveLength(1);
+});
+
+test("parseRecurringListsResponse picks the active recurring list and parses schedule", () => {
+  const list = parseRecurringListsResponse({
+    results: [
+      {
+        id: 1,
+        title: "Inactive",
+        recurring_order: { is_active: false, next_date: "2026-01-01" },
+      },
+      {
+        id: 572919,
+        title: "Ukentlig oppdatert",
+        description: "Minimumsliste",
+        url: "https://oda.com/no/account/lists/details/572919/",
+        number_of_products: 69,
+        total_quantity: 72,
+        recurring_order: {
+          id: 3686,
+          is_active: true,
+          next_date: "2026-05-11",
+          edit_url:
+            "/no/orders/recurring/572919/orders/3686/edit/?frequency=1&weekday=1&delivery_offering_id=695",
+        },
+      },
+    ],
+  });
+  expect(list?.id).toBe(572919);
+  expect(list?.productCount).toBe(69);
+  expect(list?.schedule).toMatchObject({
+    nextDate: "2026-05-11",
+    frequencyWeeks: 1,
+    weekday: 1,
+    label: "every Monday, next on 2026-05-11",
+  });
+});
+
+test("parseRecurringListsResponse returns null when nothing is active", () => {
+  expect(
+    parseRecurringListsResponse({
+      results: [{ id: 1, recurring_order: { is_active: false } }],
+    }),
+  ).toBeNull();
+});
+
+test("parseRecurringListDetail merges items with provided schedule", () => {
+  const detail = parseRecurringListDetail(
+    {
+      id: 572919,
+      title: "Ukentlig oppdatert",
+      number_of_products: 1,
+      total_quantity: 2,
+      items: [
+        {
+          quantity: 2,
+          product: {
+            id: 41014,
+            full_name: "Pepsi Max brett 20 x 0,33L",
+            gross_price: "234.00",
+          },
+        },
+      ],
+    },
+    {
+      nextDate: "2026-05-11",
+      frequencyWeeks: 2,
+      weekday: 3,
+      label: "every other Wednesday, next on 2026-05-11",
+    },
+  );
+  expect(detail.items).toHaveLength(1);
+  expect(detail.items[0]).toMatchObject({ id: 41014, quantity: 2 });
+  expect(detail.schedule?.label).toBe(
+    "every other Wednesday, next on 2026-05-11",
+  );
 });
 
 test("parseOrdersResponse flattens months and marks delivered orders not upcoming", () => {

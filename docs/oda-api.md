@@ -75,8 +75,24 @@ For our agent we infer "next delivery" by:
 
 ## Recurring order (faste varer)
 
-- `GET /api/v1/cart/recurring/` — same shape as the cart. Empty cart returns `{ id: 0, product_quantity_count: 0, groups: [] }`.
-- `POST /api/v1/cart/recurring/items/` body `{ items: [{ product_id, quantity }] }` — confirmed working. Same protocol as the regular cart: positive quantity to add, negative to remove. The `OPTIONS` preflight returns `405` (Django doesn't allow OPTIONS on this view), but `POST` works.
+There are two recurring-order surfaces and they're easy to confuse:
+
+### Consumer (cart-style) — present but unused on B2B
+
+- `GET /api/v1/cart/recurring/` — same shape as the cart. On a B2B account this always returns the empty cart shape (`product_quantity_count: 0`), even when there is an active recurring order. Don't read from this for our use case.
+- `POST /api/v1/cart/recurring/items/` body `{ items: [{ product_id, quantity }] }` — same protocol as the regular cart (positive quantity to add, negative to remove). Mutates the consumer recurring cart, not the B2B list.
+
+### B2B (product-list) — the real one
+
+B2B accounts manage their recurring order as a _product list_ with an attached recurring schedule.
+
+- `GET /api/v1/product-lists/` — paginated index. Each result includes:
+  - `id`, `title`, `description`, `url`, `number_of_products`, `total_quantity`
+  - `recurring_order: { id, is_active, next_date, edit_url }` when scheduled
+  - `eligible_for_recurring_order: bool`
+- `GET /api/v1/product-lists/{id}/` — full list including `items: [{ product, quantity }, ...]`. Items use the same `snake_case` shape as cart items, so `parseCartResponse` works on `items`.
+- `recurring_order.edit_url` carries the schedule as query params: `?frequency=N&weekday=N&delivery_offering_id=N`. `frequency` is the cadence in weeks (1=weekly, 2=biweekly), `weekday` is ISO 1=Mon … 7=Sun. `next_date` is `YYYY-MM-DD`.
+- Mutations live under `/api/v1/product-lists/{id}/products/` (POST returns 405 on OPTIONS but is the path the UI uses). Not reverse-engineered yet because we don't need writes.
 
 ## Useful HTML pages
 

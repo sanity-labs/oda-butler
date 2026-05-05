@@ -9,7 +9,9 @@ import type {
   OrderLineItem,
   Product,
   ProductPage,
+  RecurringList,
   RecurringOrder,
+  RecurringSchedule,
   User,
 } from "./types.ts";
 
@@ -51,6 +53,130 @@ export function parseRecurringResponse(data: unknown): RecurringOrder {
     productCount: readPath<number>(data, "product_quantity_count") ?? 0,
     items: parseCartResponse(data),
   };
+}
+
+/**
+ * Pick the active recurring list from `/api/v1/product-lists/`. B2B accounts
+ * keep their recurring order as a product list with `recurring_order.is_active`
+ * set; consumer accounts use the cart endpoint instead. Returns null when no
+ * active recurring list exists.
+ */
+export function parseRecurringListsResponse(
+  data: unknown,
+): RecurringList | null {
+  const lists = readPath<unknown[]>(data, "results") ?? [];
+  const active = lists.find(
+    (list) => readPath<boolean>(list, "recurring_order.is_active") === true,
+  );
+  return active ? toRecurringList(active) : null;
+}
+
+export function parseRecurringListDetail(
+  data: unknown,
+  schedule: RecurringSchedule | null,
+): RecurringList {
+  const items = readPath<unknown[]>(data, "items") ?? [];
+  return {
+    id: readPath<number>(data, "id") ?? 0,
+    title: readPath<string>(data, "title") ?? "",
+    description: readPath<string>(data, "description") ?? "",
+    url: readPath<string>(data, "url") ?? "",
+    productCount: readPath<number>(data, "number_of_products") ?? items.length,
+    totalQuantity: readPath<number>(data, "total_quantity") ?? 0,
+    items: items.map(toCartItem),
+    schedule,
+  };
+}
+
+function toRecurringList(raw: unknown): RecurringList {
+  const items = readPath<unknown[]>(raw, "items") ?? [];
+  return {
+    id: readPath<number>(raw, "id") ?? 0,
+    title: readPath<string>(raw, "title") ?? "",
+    description: readPath<string>(raw, "description") ?? "",
+    url: readPath<string>(raw, "url") ?? "",
+    productCount: readPath<number>(raw, "number_of_products") ?? 0,
+    totalQuantity: readPath<number>(raw, "total_quantity") ?? 0,
+    items: items.map(toCartItem),
+    schedule: parseRecurringSchedule(
+      readPath<Record<string, unknown>>(raw, "recurring_order"),
+    ),
+  };
+}
+
+export function parseRecurringSchedule(
+  raw: Record<string, unknown> | undefined | null,
+): RecurringSchedule | null {
+  if (!raw) return null;
+  const nextDate = readPath<string>(raw, "next_date") ?? null;
+  const editUrl = readPath<string>(raw, "edit_url") ?? "";
+  const params = parseEditUrlParams(editUrl);
+  const frequencyWeeks = params.frequency;
+  const weekday = params.weekday;
+  return {
+    nextDate,
+    frequencyWeeks,
+    weekday,
+    label: formatScheduleLabel({ nextDate, frequencyWeeks, weekday }),
+  };
+}
+
+function parseEditUrlParams(editUrl: string): {
+  frequency: number | null;
+  weekday: number | null;
+} {
+  if (!editUrl) return { frequency: null, weekday: null };
+  const query = editUrl.includes("?") ? editUrl.split("?")[1] : editUrl;
+  const params = new URLSearchParams(query);
+  const toInt = (value: string | null) => {
+    if (!value) return null;
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+  return {
+    frequency: toInt(params.get("frequency")),
+    weekday: toInt(params.get("weekday")),
+  };
+}
+
+const WEEKDAY_NAMES = [
+  "",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+  "Sunday",
+];
+
+function formatScheduleLabel({
+  nextDate,
+  frequencyWeeks,
+  weekday,
+}: {
+  nextDate: string | null;
+  frequencyWeeks: number | null;
+  weekday: number | null;
+}): string {
+  const weekdayName =
+    weekday && weekday >= 1 && weekday <= 7 ? WEEKDAY_NAMES[weekday] : null;
+  const cadence =
+    frequencyWeeks === 1
+      ? weekdayName
+        ? `every ${weekdayName}`
+        : "weekly"
+      : frequencyWeeks === 2
+        ? weekdayName
+          ? `every other ${weekdayName}`
+          : "every other week"
+        : frequencyWeeks && frequencyWeeks > 2
+          ? `every ${frequencyWeeks} weeks`
+          : weekdayName
+            ? `on ${weekdayName}s`
+            : "";
+  const next = nextDate ? `next on ${nextDate}` : "";
+  return [cadence, next].filter(Boolean).join(", ");
 }
 
 /**

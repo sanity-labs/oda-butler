@@ -63,6 +63,28 @@ export type RecurringOrder = {
   items: CartItem[];
 };
 
+export type RecurringSchedule = {
+  /** ISO date (YYYY-MM-DD) of the next scheduled delivery. */
+  nextDate: string | null;
+  /** Weeks between deliveries. 1 = weekly, 2 = every other week. */
+  frequencyWeeks: number | null;
+  /** ISO weekday: 1=Mon, 2=Tue, ..., 7=Sun. */
+  weekday: number | null;
+  /** Human-readable label, e.g. "every Monday, next on May 11". */
+  label: string;
+};
+
+export type RecurringList = {
+  id: number;
+  title: string;
+  description: string;
+  url: string;
+  productCount: number;
+  totalQuantity: number;
+  items: CartItem[];
+  schedule: RecurringSchedule | null;
+};
+
 export type User = {
   email: string;
   firstName?: string;
