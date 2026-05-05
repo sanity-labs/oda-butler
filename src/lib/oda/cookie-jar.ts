@@ -1,4 +1,5 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 
 export class CookieJar {
   #cookies: Record<string, string> = {};
@@ -32,6 +33,7 @@ export class CookieJar {
   }
 
   save(): void {
+    mkdirSync(dirname(this.#path), { recursive: true });
     writeFileSync(this.#path, JSON.stringify(this.#cookies, null, 2));
   }
 
