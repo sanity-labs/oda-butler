@@ -1,5 +1,5 @@
 {
-  "name": "slack-oda",
+  "name": "oda-butler",
   "module": "src/index.ts",
   "type": "module",
   "private": true,
