@@ -4,7 +4,6 @@ import type { Message, Thread } from "chat";
 import { ODA_SYSTEM_PROMPT } from "./instructions.ts";
 import { asStreamingPlan } from "./streaming.ts";
 import { memory } from "./memory.ts";
-import { listOrders } from "./tools/orders.ts";
 import { getProduct, searchProducts } from "./tools/products.ts";
 import {
   getRecurringOrder,
@@ -173,12 +172,11 @@ export const odaAgent = new Agent({
   id: "oda",
   name: "Oda",
   instructions: ODA_SYSTEM_PROMPT,
-  model: "anthropic/claude-opus-4-6",
+  model: "anthropic/claude-sonnet-4-6",
   memory,
   tools: {
     search_products: searchProducts,
     get_product: getProduct,
-    list_orders: listOrders,
     get_recurring_order: getRecurringOrder,
     update_recurring_item: updateRecurringItem,
     remove_recurring_item: removeRecurringItem,

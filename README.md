@@ -1,6 +1,6 @@
 # oda-butler
 
-Slack bot for Sanity's Oslo office shared [Oda](https://oda.com/) grocery account. Powered by Claude Opus 4.6 and [Mastra](https://mastra.ai/).
+Slack bot for Sanity's Oslo office shared [Oda](https://oda.com/) grocery account. Powered by Claude Sonnet 4.6 and [Mastra](https://mastra.ai/).
 
 ## What it does
 
