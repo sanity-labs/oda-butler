@@ -51,6 +51,24 @@ test("MessageList dedupes identical messages by id within a single add", () => {
   expect(ids(list)).toEqual(["A"]);
 });
 
+test("MessageList ends with whatever has the latest createdAt", () => {
+  // Anthropic's newer models reject conversations ending with an assistant
+  // turn. We rely on this Mastra behavior: pass an assistant turn with an
+  // earlier createdAt than the user's current mention and it lands second-
+  // to-last after sorting. buildConversation's `< currentTs` filter is the
+  // belt-and-braces guard for cases where the API surprises us.
+  const list = new MessageList();
+  list.add(
+    [
+      dbMsg("prior-assistant", "assistant", "old reply", 1700000001),
+      dbMsg("current-user", "user", "now", 1700000002),
+    ] as never,
+    "input",
+  );
+  const all = list.get.all.db();
+  expect(all.at(-1)?.role).toBe("user");
+});
+
 test("MessageList dedupes across separate adds (replay safety)", () => {
   const list = new MessageList();
   list.add(

@@ -83,15 +83,24 @@ async function handleMention(thread: Thread, message: Message): Promise<void> {
  * Bot replies become `assistant` turns; everyone else's messages become
  * `user` turns prefixed with the speaker's name so the agent can tell
  * speakers apart in multi-person threads.
+ *
+ * We only include history strictly older than `current` so that after
+ * Mastra's chronological sort the conversation always ends with the user's
+ * mention. Anthropic's newer models reject conversations ending with an
+ * assistant turn ("prefill mode not supported"), and a stale bot apology
+ * with a later ts is exactly the kind of thing that would otherwise sneak
+ * in at the end.
  */
 async function buildConversation(
   thread: Thread,
   current: Message,
 ): Promise<Turn[]> {
+  const currentTs = slackTsToDate(current.id).getTime();
   const collected: Message[] = [];
   for await (const msg of thread.allMessages) {
     if (collected.length >= HISTORY_LIMIT) break;
     if (msg.id === current.id) continue;
+    if (slackTsToDate(msg.id).getTime() >= currentTs) continue;
     if (!stripMentions(msg.text).trim()) continue;
     collected.push(msg);
   }
