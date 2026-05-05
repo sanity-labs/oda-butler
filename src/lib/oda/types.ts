@@ -1,3 +1,22 @@
+/**
+ * Domain types for the Oda integration.
+ *
+ * These are what the agent and tools see: camelCase, narrowed enums,
+ * computed fields like `isUpcoming` and `RecurringSchedule.label` that
+ * don't exist on the wire. They're intentionally separate from the
+ * OpenAPI-generated wire shapes in `api-types.ts`.
+ *
+ * Translation between the two happens in `parsers.ts`. This is the
+ * Anti-Corruption Layer pattern (Evans, *Domain-Driven Design*): when
+ * Oda renames a field or adds a tracking state we've never seen, the
+ * blast radius stops at the parsers.
+ *
+ * Rule of thumb:
+ * - New field that's a renamed/cleaned version of a wire field → here.
+ * - Computed/synthesized field (label, isUpcoming, narrowed enum) → here.
+ * - Raw wire shape → `api-types.ts` (regen via `bun run gen:api-types`).
+ */
+
 export type Product = {
   id: number;
   name: string;
@@ -12,6 +31,33 @@ export type ProductPage = {
   pageUrl: string;
   items: Product[];
   hasMore: boolean;
+};
+
+export type NutritionRow = {
+  /** Norwegian label, e.g. "Energi", "Fett", "Karbohydrater". */
+  label: string;
+  /** Pre-formatted value, e.g. "173 kJ / 41 kcal", "1 g". */
+  value: string;
+  /** True when the row is a sub-bullet under the previous one. */
+  indented: boolean;
+};
+
+export type ProductDetails = Product & {
+  isAvailable: boolean;
+  availabilityNote: string;
+  description: string;
+  /** "Per 100g/ml" macros and micros, in Oda's order. May be empty. */
+  nutrition: NutritionRow[];
+  ingredients: string;
+  allergens: string;
+  origin: string;
+  productionCountry: string;
+  supplier: string;
+  storage: string;
+  size: string;
+  shelfLifeGuarantee: string;
+  /** Free-form extras keyed by their Norwegian label, in case the agent wants more. */
+  facts: Record<string, string>;
 };
 
 export type CartItem = {

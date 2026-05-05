@@ -5,7 +5,7 @@ import { ODA_SYSTEM_PROMPT } from "./instructions.ts";
 import { asStreamingPlan } from "./streaming.ts";
 import { memory } from "./memory.ts";
 import { getNextDelivery, getOrder, listOrders } from "./tools/orders.ts";
-import { searchProducts } from "./tools/products.ts";
+import { getProduct, searchProducts } from "./tools/products.ts";
 import {
   getRecurringOrder,
   removeRecurringItem,
@@ -177,6 +177,7 @@ export const odaAgent = new Agent({
   memory,
   tools: {
     search_products: searchProducts,
+    get_product: getProduct,
     list_orders: listOrders,
     get_order: getOrder,
     get_next_delivery: getNextDelivery,

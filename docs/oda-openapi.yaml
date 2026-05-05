@@ -503,15 +503,94 @@ components:
               oneOf:
                 - { type: object }
                 - { type: "null" }
-            detailed_info:
-              type: object
-              description: Origin, nutritional info, ingredient declarations, etc.
+            detailed_info: { $ref: "#/components/schemas/ProductDetailedInfo" }
             is_product_included_in_product_lists: { type: boolean }
             is_restricted: { type: boolean }
             restriction_age_limit:
               oneOf:
                 - { type: integer }
                 - { type: "null" }
+
+    ProductDetailedInfo:
+      type: object
+      description: |
+        Origin, nutritional info, and ingredient declarations. The `local`
+        array contains one entry per language; for our use case (Norwegian
+        site) the first entry is always `nb`.
+      properties:
+        country:
+          type: string
+          description: ISO country code, e.g. `"NO"`.
+        local:
+          type: array
+          items: { $ref: "#/components/schemas/ProductLocalInfo" }
+
+    ProductLocalInfo:
+      type: object
+      properties:
+        language: { type: string, example: nb }
+        language_name: { type: string }
+        local_product_name: { type: string }
+        short_description: { type: string }
+        description_from_supplier: { type: string }
+        nutrition_info_table:
+          oneOf:
+            - { $ref: "#/components/schemas/ProductInfoTable" }
+            - { type: "null" }
+        contents_table:
+          oneOf:
+            - { $ref: "#/components/schemas/ProductInfoTable" }
+            - { type: "null" }
+        hazards:
+          oneOf:
+            - { type: object }
+            - { type: "null" }
+
+    ProductInfoTable:
+      type: object
+      description: |
+        Generic key/value table used for both nutrition ("per 100g/ml")
+        and contents (ingredients, allergens, origin, supplier, storage).
+      properties:
+        title: { type: string, nullable: true }
+        rows:
+          type: array
+          items: { $ref: "#/components/schemas/ProductInfoRow" }
+        disclaimers:
+          oneOf:
+            - { type: array, items: { type: string } }
+            - { type: "null" }
+
+    ProductInfoRow:
+      type: object
+      properties:
+        key: { type: string, description: Norwegian label }
+        value: { type: string, description: Pre-formatted value }
+        indent:
+          oneOf:
+            - { type: integer }
+            - { type: "null" }
+          description: When set, the row is a sub-bullet under the previous one.
+        badge:
+          oneOf:
+            - { type: object }
+            - { type: "null" }
+        tooltip:
+          oneOf:
+            - { type: object }
+            - { type: "null" }
+        link:
+          oneOf:
+            - { type: object }
+            - { type: "null" }
+        emphasis:
+          oneOf:
+            - { type: object }
+            - { type: "null" }
+        key_id:
+          oneOf:
+            - { type: string }
+            - { type: "null" }
 
     Category:
       type: object

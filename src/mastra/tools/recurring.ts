@@ -1,28 +1,36 @@
 import { createTool } from "@mastra/core/tools";
+import { outdent } from "outdent";
 import { z } from "zod";
 import { oda } from "../../lib/oda/instance.ts";
 
 export const getRecurringOrder = createTool({
   id: "get_recurring_order",
-  description: [
-    "Read the office's recurring order (faste varer):",
-    "items with quantities, the delivery schedule (frequency, weekday, next delivery date),",
-    'and the human-readable schedule label like "every Monday, next on 2026-05-11".',
-    "Call this before update_recurring_item or remove_recurring_item so you know what's already on the list.",
-  ].join(" "),
+  description: outdent`
+    Read the office's recurring order (faste varer): items with
+    quantities, the delivery schedule (frequency, weekday, next delivery
+    date), and the human-readable schedule label like
+    "every Monday, next on 2026-05-11".
+
+    Call this before update_recurring_item or remove_recurring_item so
+    you know what's already on the list.
+  `,
   inputSchema: z.object({}),
   execute: () => oda.getRecurringList(),
 });
 
 export const updateRecurringItem = createTool({
   id: "update_recurring_item",
-  description: [
-    "Add a product to the recurring order, or change its per-delivery quantity.",
-    "Idempotent: passing quantity 3 always lands at 3, no matter what was there before.",
-    'Use this for both "add Pepsi" (quantity 1) and "add another Pepsi" (current+1).',
-    "To delete a product, use remove_recurring_item instead.",
-    "Returns previousQuantity and quantity so you can phrase a precise confirmation.",
-  ].join(" "),
+  description: outdent`
+    Add a product to the recurring order, or change its per-delivery
+    quantity. Idempotent: passing quantity 3 always lands at 3, no matter
+    what was there before.
+
+    Use this for both "add Pepsi" (quantity 1) and "add another Pepsi"
+    (current+1). To delete a product, use remove_recurring_item instead.
+
+    Returns previousQuantity and quantity so you can phrase a precise
+    confirmation.
+  `,
   inputSchema: z.object({
     productId: z
       .number()
@@ -45,11 +53,13 @@ export const updateRecurringItem = createTool({
 
 export const removeRecurringItem = createTool({
   id: "remove_recurring_item",
-  description: [
-    "Remove a product from the recurring order entirely.",
-    "Idempotent: removing a product that isn't on the list is a no-op.",
-    "Returns previousQuantity (what it was before removal) so you can confirm what was dropped.",
-  ].join(" "),
+  description: outdent`
+    Remove a product from the recurring order entirely. Idempotent:
+    removing a product that isn't on the list is a no-op.
+
+    Returns previousQuantity (what it was before removal) so you can
+    confirm what was dropped.
+  `,
   inputSchema: z.object({
     productId: z
       .number()

@@ -6,6 +6,7 @@ import type {
   WireCart,
   WireOrderDetail,
   WireOrdersResponse,
+  WireProductDetail,
   WireProductList,
   WireProductListsPage,
   WireSearchResponse,
@@ -15,6 +16,7 @@ import {
   parseHtmlSearchPage,
   parseOrderDetail,
   parseOrdersResponse,
+  parseProductDetail,
   parseRecurringListDetail,
   parseRecurringListsResponse,
   parseRecurringResponse,
@@ -26,6 +28,7 @@ import type {
   CartItem,
   Order,
   OrderDetails,
+  ProductDetails,
   ProductPage,
   RecurringList,
   RecurringOrder,
@@ -34,6 +37,7 @@ import type {
 } from "./types.ts";
 
 const SEARCH_API = `${ODA_API_BASE}/api/v1/search/`;
+const PRODUCTS_API = `${ODA_API_BASE}/api/v1/products/`;
 const CART_API = `${ODA_API_BASE}/api/v1/cart/`;
 const CART_ITEMS_API = `${ODA_API_BASE}/api/v1/cart/items/`;
 const RECURRING_API = `${ODA_API_BASE}/api/v1/cart/recurring/`;
@@ -95,6 +99,17 @@ export class OdaClient {
     }`;
     const nextData = await this.#http.fetchNextData(htmlUrl);
     return parseHtmlSearchPage(htmlUrl, nextData);
+  }
+
+  /**
+   * Fetch full product details, including nutrition, ingredients, allergens,
+   * origin, and storage info. Returns null when the product doesn't exist.
+   */
+  async getProduct(productId: number): Promise<ProductDetails | null> {
+    const data = await this.#getJson<WireProductDetail>(
+      `${PRODUCTS_API}${productId}/`,
+    );
+    return data ? parseProductDetail(data) : null;
   }
 
   async getCart(): Promise<CartItem[]> {

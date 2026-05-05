@@ -1,4 +1,4 @@
-import { compact } from "es-toolkit";
+import { compact, mapValues } from "es-toolkit";
 import { toFinite } from "es-toolkit/compat";
 import type {
   WireCart,
@@ -6,6 +6,7 @@ import type {
   WireOrderDetail,
   WireOrdersResponse,
   WireProduct,
+  WireProductDetail,
   WireProductList,
   WireProductListSummary,
   WireProductListsPage,
@@ -16,10 +17,12 @@ import { findDehydratedQuery, readPath } from "./next-data.ts";
 import type {
   CartItem,
   DeliveryStep,
+  NutritionRow,
   Order,
   OrderDetails,
   OrderLineItem,
   Product,
+  ProductDetails,
   ProductPage,
   RecurringList,
   RecurringOrder,
@@ -108,6 +111,74 @@ function htmlEntryUrl(
   if (direct)
     return direct.startsWith("http") ? direct : `https://oda.com${direct}`;
   return `https://oda.com/no/products/${productId}/`;
+}
+
+/**
+ * Map our domain field names to the Norwegian labels Oda uses in the
+ * `contents_table` rows. Key here = our field, value = Oda's label.
+ */
+const CONTENTS_FIELD_LABELS = {
+  ingredients: "Ingredienser",
+  allergens: "Allergener",
+  origin: "Opprinnelse",
+  productionCountry: "Produksjonsland",
+  supplier: "Leverandør",
+  storage: "Oppbevaring",
+  size: "Størrelse",
+  shelfLifeGuarantee: "Holdbarhetsgaranti",
+} as const;
+
+/**
+ * Flatten Oda's product detail into the agent-facing `ProductDetails` shape.
+ * The wire response has nutrition and contents (ingredients, allergens,
+ * origin, supplier, storage) under `detailed_info.local[0]` keyed by
+ * Norwegian labels; we surface the common ones as named fields and stash
+ * the rest under `facts` for the agent to format if needed.
+ */
+export function parseProductDetail(data: WireProductDetail): ProductDetails {
+  const local = data.detailed_info?.local?.[0];
+  const facts = factsFromRows(local?.contents_table?.rows);
+  const fields = mapValues(
+    CONTENTS_FIELD_LABELS,
+    (label) => facts[label] ?? "",
+  );
+
+  return {
+    ...toProduct(data),
+    ...fields,
+    isAvailable: data.availability?.is_available ?? false,
+    availabilityNote: data.availability?.description ?? "",
+    description:
+      local?.description_from_supplier ?? local?.short_description ?? "",
+    nutrition: nutritionRowsFrom(local?.nutrition_info_table?.rows),
+    facts,
+  };
+}
+
+function factsFromRows(
+  rows: { key?: string; value?: string }[] | undefined,
+): Record<string, string> {
+  const facts: Record<string, string> = {};
+  for (const row of rows ?? []) {
+    if (row.key && row.value) facts[row.key] = row.value;
+  }
+  return facts;
+}
+
+function nutritionRowsFrom(
+  rows: { key?: string; value?: string; indent?: number | null }[] | undefined,
+): NutritionRow[] {
+  return compact(
+    (rows ?? []).map((row) =>
+      row.key && row.value
+        ? {
+            label: row.key,
+            value: row.value,
+            indented: typeof row.indent === "number" && row.indent > 0,
+          }
+        : null,
+    ),
+  );
 }
 
 export function parseCartResponse(data: WireCart): CartItem[] {
@@ -222,24 +293,21 @@ function formatScheduleLabel({
   frequencyWeeks: number | null;
   weekday: number | null;
 }): string {
-  const weekdayName =
-    weekday && weekday >= 1 && weekday <= 7 ? WEEKDAY_NAMES[weekday] : null;
-  const cadence =
-    frequencyWeeks === 1
-      ? weekdayName
-        ? `every ${weekdayName}`
-        : "weekly"
-      : frequencyWeeks === 2
-        ? weekdayName
-          ? `every other ${weekdayName}`
-          : "every other week"
-        : frequencyWeeks && frequencyWeeks > 2
-          ? `every ${frequencyWeeks} weeks`
-          : weekdayName
-            ? `on ${weekdayName}s`
-            : "";
+  const day = weekdayName(weekday);
   const next = nextDate ? `next on ${nextDate}` : "";
-  return [cadence, next].filter(Boolean).join(", ");
+  return compact([formatCadence(frequencyWeeks, day), next]).join(", ");
+}
+
+function weekdayName(weekday: number | null): string | null {
+  if (!weekday || weekday < 1 || weekday > 7) return null;
+  return WEEKDAY_NAMES[weekday] ?? null;
+}
+
+function formatCadence(weeks: number | null, day: string | null): string {
+  if (weeks === 1) return day ? `every ${day}` : "weekly";
+  if (weeks === 2) return day ? `every other ${day}` : "every other week";
+  if (weeks && weeks > 2) return `every ${weeks} weeks`;
+  return day ? `on ${day}s` : "";
 }
 
 /**

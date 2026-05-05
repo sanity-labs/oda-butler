@@ -899,11 +899,53 @@ export interface components {
             related_products?: components["schemas"]["Product"][];
             discount_mix_and_match_products?: components["schemas"]["Product"][];
             bottle_deposit?: Record<string, never> | null;
-            /** @description Origin, nutritional info, ingredient declarations, etc. */
-            detailed_info?: Record<string, never>;
+            detailed_info?: components["schemas"]["ProductDetailedInfo"];
             is_product_included_in_product_lists?: boolean;
             is_restricted?: boolean;
             restriction_age_limit?: number | null;
+        };
+        /**
+         * @description Origin, nutritional info, and ingredient declarations. The `local`
+         *     array contains one entry per language; for our use case (Norwegian
+         *     site) the first entry is always `nb`.
+         */
+        ProductDetailedInfo: {
+            /** @description ISO country code, e.g. `"NO"`. */
+            country?: string;
+            local?: components["schemas"]["ProductLocalInfo"][];
+        };
+        ProductLocalInfo: {
+            /** @example nb */
+            language?: string;
+            language_name?: string;
+            local_product_name?: string;
+            short_description?: string;
+            description_from_supplier?: string;
+            nutrition_info_table?: components["schemas"]["ProductInfoTable"] | null;
+            contents_table?: components["schemas"]["ProductInfoTable"] | null;
+            hazards?: Record<string, never> | null;
+        };
+        /**
+         * @description Generic key/value table used for both nutrition ("per 100g/ml")
+         *     and contents (ingredients, allergens, origin, supplier, storage).
+         */
+        ProductInfoTable: {
+            title?: string | null;
+            rows?: components["schemas"]["ProductInfoRow"][];
+            disclaimers?: string[] | null;
+        };
+        ProductInfoRow: {
+            /** @description Norwegian label */
+            key?: string;
+            /** @description Pre-formatted value */
+            value?: string;
+            /** @description When set, the row is a sub-bullet under the previous one. */
+            indent?: number | null;
+            badge?: Record<string, never> | null;
+            tooltip?: Record<string, never> | null;
+            link?: Record<string, never> | null;
+            emphasis?: Record<string, never> | null;
+            key_id?: string | null;
         };
         Category: {
             id?: number;

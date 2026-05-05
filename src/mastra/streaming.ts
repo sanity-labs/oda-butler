@@ -5,6 +5,7 @@ type AgentStream = AsyncIterable<ChunkType>;
 
 const TOOL_LABELS: Record<string, (args: Record<string, unknown>) => string> = {
   search_products: (a) => `Searching for "${stringArg(a, "query")}"`,
+  get_product: () => "Reading product info",
   list_orders: () => "Fetching past orders",
   get_order: (a) => `Reading order ${stringArg(a, "orderNumber")}`,
   get_next_delivery: () => "Checking next delivery",
