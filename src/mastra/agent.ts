@@ -1,6 +1,13 @@
 import { createSlackAdapter, type SlackAdapter } from "@chat-adapter/slack";
 import { Agent } from "@mastra/core/agent";
 import type { Message, Thread } from "chat";
+import { requireEnv } from "../lib/env.ts";
+import {
+  ALLOWED_CHANNELS,
+  HISTORY_LIMIT,
+  LOADING_MESSAGES,
+  MENTION_PATTERN,
+} from "./constants.ts";
 import { ODA_SYSTEM_PROMPT } from "./instructions.ts";
 import { memory } from "./memory.ts";
 import { asStreamingPlan } from "./streaming.ts";
@@ -10,51 +17,7 @@ import {
   removeRecurringItem,
   updateRecurringItem,
 } from "./tools/recurring.ts";
-
-/**
- * Mastra DB-shape message. Required for Mastra to honor our supplied `id`
- * (for dedupe) and `createdAt` (for ordering). Other shapes look like they
- * accept those fields but silently overwrite `createdAt` with `Date.now()`.
- * Verified empirically; see `agent.test.ts` for the regression locks.
- */
-type Turn = {
-  id: string;
-  role: "user" | "assistant";
-  content: { format: 2; parts: Array<{ type: "text"; text: string }> };
-  createdAt: Date;
-};
-
-const requireEnv = (name: string): string => {
-  const value = process.env[name];
-  if (!value) throw new Error(`Missing required env var: ${name}`);
-  return value;
-};
-
-const ALLOWED_CHANNELS = new Set([
-  "oslo-office-internal",
-  "test-content-agent",
-]);
-
-const HISTORY_LIMIT = 20;
-const MENTION_PATTERN = /<@[A-Z0-9]+>/g;
-
-/**
- * Loading messages Slack rotates through under the bot's thinking indicator.
- * Max 10 entries (Slack hard cap). Keep them on-brand: dry, food-adjacent,
- * a little snarky. Slack auto-clears when we post the reply.
- */
-const LOADING_MESSAGES = [
-  "Squeezing the oranges…",
-  "Asking the cheese for an opinion…",
-  "Counting the bananas…",
-  "Stirring the gryte…",
-  "Bribing the office goldfish for a tip…",
-  "Checking the fridge twice…",
-  "Finding the good kaffe…",
-  "Comparing kr per liter…",
-  "Negotiating with the bakery…",
-  "Reading the back of the box…",
-];
+import type { Turn } from "./types.ts";
 
 async function isAllowedChannel(thread: Thread): Promise<boolean> {
   const info = await thread.channel.fetchMetadata();
