@@ -1,5 +1,5 @@
 import { Agent } from "@mastra/core/agent";
-import { createSlackAdapter } from "@chat-adapter/slack";
+import { createSlackAdapter, type SlackAdapter } from "@chat-adapter/slack";
 import type { Message, Thread } from "chat";
 import { ODA_SYSTEM_PROMPT } from "./instructions.ts";
 import { asStreamingPlan } from "./streaming.ts";
@@ -39,6 +39,24 @@ const ALLOWED_CHANNELS = new Set([
 const HISTORY_LIMIT = 20;
 const MENTION_PATTERN = /<@[A-Z0-9]+>/g;
 
+/**
+ * Loading messages Slack rotates through under the bot's thinking indicator.
+ * Max 10 entries (Slack hard cap). Keep them on-brand: dry, food-adjacent,
+ * a little snarky. Slack auto-clears when we post the reply.
+ */
+const LOADING_MESSAGES = [
+  "Squeezing the oranges…",
+  "Asking the cheese for an opinion…",
+  "Counting the bananas…",
+  "Stirring the gryte…",
+  "Bribing the office goldfish for a tip…",
+  "Checking the fridge twice…",
+  "Finding the good kaffe…",
+  "Comparing kr per liter…",
+  "Negotiating with the bakery…",
+  "Reading the back of the box…",
+];
+
 async function isAllowedChannel(thread: Thread): Promise<boolean> {
   const info = await thread.channel.fetchMetadata();
   if (info.isDM) return false;
@@ -68,6 +86,8 @@ async function handleMention(thread: Thread, message: Message): Promise<void> {
     await thread.post("You rang? Tell me what you need.");
     return;
   }
+
+  await setLoadingStatus(thread);
 
   const stream = await odaAgent.stream(messages, {
     memory: {
@@ -127,6 +147,26 @@ function slackTsToDate(ts: string): Date {
 
 function stripMentions(text: string): string {
   return text.replace(MENTION_PATTERN, "");
+}
+
+/**
+ * Show a Slack thinking indicator with rotating loading messages while the
+ * agent works. Auto-clears when chat-adapter posts the reply. Best-effort:
+ * failures (rate limits, transient errors) shouldn't block the response.
+ */
+async function setLoadingStatus(thread: Thread): Promise<void> {
+  const adapter = thread.adapter as SlackAdapter;
+  if (typeof adapter.setAssistantStatus !== "function") return;
+  try {
+    await adapter.setAssistantStatus(
+      thread.channelId,
+      thread.id,
+      "is shopping…",
+      LOADING_MESSAGES,
+    );
+  } catch {
+    // Non-critical; if Slack rejects we still continue.
+  }
 }
 
 export const odaAgent = new Agent({
