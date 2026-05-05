@@ -2,6 +2,13 @@ import { CookieJar } from "./cookie-jar.ts";
 import { type Credentials, loadCredentials } from "./credentials.ts";
 import { ensureOk, extractListError } from "./errors.ts";
 import { ODA_API_BASE, ODA_BASE_URL, OdaTransport } from "./http.ts";
+import type {
+  WireCart,
+  WireOrderDetail,
+  WireOrdersResponse,
+  WireProductList,
+  WireProductListsPage,
+} from "./api-types.ts";
 import {
   parseCartResponse,
   parseOrderDetail,
@@ -10,6 +17,7 @@ import {
   parseRecurringListDetail,
   parseRecurringListsResponse,
   parseRecurringResponse,
+  parseRecurringSchedule,
   parseUser,
 } from "./parsers.ts";
 import type {
@@ -68,7 +76,7 @@ export class OdaClient {
   }
 
   async getCart(): Promise<CartItem[]> {
-    const data = await this.#getJson(CART_API);
+    const data = await this.#getJson<WireCart>(CART_API);
     return data ? parseCartResponse(data) : [];
   }
 
@@ -89,13 +97,13 @@ export class OdaClient {
   }
 
   async getOrders(): Promise<Order[]> {
-    const data = await this.#getJson(ORDERS_API);
+    const data = await this.#getJson<WireOrdersResponse>(ORDERS_API);
     return data ? parseOrdersResponse(data) : [];
   }
 
   async getOrderDetails(orderNumber: string): Promise<OrderDetails | null> {
     const url = `${ORDERS_API}${encodeURIComponent(orderNumber)}/`;
-    const data = await this.#getJson(url);
+    const data = await this.#getJson<WireOrderDetail>(url);
     return data ? parseOrderDetail(data) : null;
   }
 
@@ -109,7 +117,7 @@ export class OdaClient {
   }
 
   async getRecurringOrder(): Promise<RecurringOrder> {
-    const data = await this.#getJson(RECURRING_API);
+    const data = await this.#getJson<WireCart>(RECURRING_API);
     return data ? parseRecurringResponse(data) : { productCount: 0, items: [] };
   }
 
@@ -120,11 +128,12 @@ export class OdaClient {
    * Returns null when no list has an active recurring order.
    */
   async getRecurringList(): Promise<RecurringList | null> {
-    const indexData = await this.#getJson(PRODUCT_LISTS_API);
+    const indexData =
+      await this.#getJson<WireProductListsPage>(PRODUCT_LISTS_API);
     const summary = indexData ? parseRecurringListsResponse(indexData) : null;
     if (!summary) return null;
 
-    const detailData = await this.#getJson(
+    const detailData = await this.#getJson<WireProductList>(
       `${PRODUCT_LISTS_API}${summary.id}/`,
     );
     if (!detailData) return summary;
@@ -175,10 +184,10 @@ export class OdaClient {
       const text = await response.text().catch(() => "");
       throw new Error(extractListError(text, response.status));
     }
-    const data = await response.json();
+    const data = (await response.json()) as WireProductList;
     return parseRecurringListDetail(
       data,
-      parseRecurringListsResponse({ results: [data] })?.schedule ?? null,
+      parseRecurringSchedule(data.recurring_order ?? null),
     );
   }
 
@@ -262,8 +271,8 @@ export class OdaClient {
     return parseUser(nextData);
   }
 
-  async #getJson(url: string): Promise<unknown> {
+  async #getJson<T>(url: string): Promise<T | null> {
     const response = await this.#http.getJson(url);
-    return response.ok ? response.json() : null;
+    return response.ok ? ((await response.json()) as T) : null;
   }
 }

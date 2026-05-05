@@ -1,5 +1,14 @@
 import { compact } from "es-toolkit";
 import { toFinite } from "es-toolkit/compat";
+import type {
+  WireCart,
+  WireOrderDetail,
+  WireOrdersResponse,
+  WireProductList,
+  WireProductListSummary,
+  WireProductListsPage,
+  WireRecurringOrderMeta,
+} from "./api-types.ts";
 import { findDehydratedQuery, readPath } from "./next-data.ts";
 import type {
   CartItem,
@@ -39,18 +48,15 @@ export function parseProductPage(url: string, nextData: unknown): ProductPage {
   };
 }
 
-export function parseCartResponse(data: unknown): CartItem[] {
-  const top = readPath<unknown[]>(data, "items") ?? [];
-  const groups = readPath<unknown[]>(data, "groups") ?? [];
-  const grouped = groups.flatMap(
-    (group) => readPath<unknown[]>(group, "items") ?? [],
-  );
+export function parseCartResponse(data: WireCart): CartItem[] {
+  const top = data.items ?? [];
+  const grouped = (data.groups ?? []).flatMap((group) => group.items ?? []);
   return [...top, ...grouped].map(toCartItem);
 }
 
-export function parseRecurringResponse(data: unknown): RecurringOrder {
+export function parseRecurringResponse(data: WireCart): RecurringOrder {
   return {
-    productCount: readPath<number>(data, "product_quantity_count") ?? 0,
+    productCount: data.product_quantity_count ?? 0,
     items: parseCartResponse(data),
   };
 }
@@ -62,55 +68,50 @@ export function parseRecurringResponse(data: unknown): RecurringOrder {
  * active recurring list exists.
  */
 export function parseRecurringListsResponse(
-  data: unknown,
+  data: WireProductListsPage,
 ): RecurringList | null {
-  const lists = readPath<unknown[]>(data, "results") ?? [];
-  const active = lists.find(
-    (list) => readPath<boolean>(list, "recurring_order.is_active") === true,
+  const active = (data.results ?? []).find(
+    (list) => list.recurring_order?.is_active === true,
   );
   return active ? toRecurringList(active) : null;
 }
 
 export function parseRecurringListDetail(
-  data: unknown,
+  data: WireProductList,
   schedule: RecurringSchedule | null,
 ): RecurringList {
-  const items = readPath<unknown[]>(data, "items") ?? [];
+  const items = data.items ?? [];
   return {
-    id: readPath<number>(data, "id") ?? 0,
-    title: readPath<string>(data, "title") ?? "",
-    description: readPath<string>(data, "description") ?? "",
-    url: readPath<string>(data, "url") ?? "",
-    productCount: readPath<number>(data, "number_of_products") ?? items.length,
-    totalQuantity: readPath<number>(data, "total_quantity") ?? 0,
+    id: data.id ?? 0,
+    title: data.title ?? "",
+    description: data.description ?? "",
+    url: data.url ?? "",
+    productCount: data.number_of_products ?? items.length,
+    totalQuantity: data.total_quantity ?? 0,
     items: items.map(toCartItem),
     schedule,
   };
 }
 
-function toRecurringList(raw: unknown): RecurringList {
-  const items = readPath<unknown[]>(raw, "items") ?? [];
+function toRecurringList(raw: WireProductListSummary): RecurringList {
   return {
-    id: readPath<number>(raw, "id") ?? 0,
-    title: readPath<string>(raw, "title") ?? "",
-    description: readPath<string>(raw, "description") ?? "",
-    url: readPath<string>(raw, "url") ?? "",
-    productCount: readPath<number>(raw, "number_of_products") ?? 0,
-    totalQuantity: readPath<number>(raw, "total_quantity") ?? 0,
-    items: items.map(toCartItem),
-    schedule: parseRecurringSchedule(
-      readPath<Record<string, unknown>>(raw, "recurring_order"),
-    ),
+    id: raw.id ?? 0,
+    title: raw.title ?? "",
+    description: raw.description ?? "",
+    url: raw.url ?? "",
+    productCount: raw.number_of_products ?? 0,
+    totalQuantity: raw.total_quantity ?? 0,
+    items: [],
+    schedule: parseRecurringSchedule(raw.recurring_order ?? null),
   };
 }
 
 export function parseRecurringSchedule(
-  raw: Record<string, unknown> | undefined | null,
+  raw: WireRecurringOrderMeta | null,
 ): RecurringSchedule | null {
   if (!raw) return null;
-  const nextDate = readPath<string>(raw, "next_date") ?? null;
-  const editUrl = readPath<string>(raw, "edit_url") ?? "";
-  const params = parseEditUrlParams(editUrl);
+  const nextDate = raw.next_date ?? null;
+  const params = parseEditUrlParams(raw.edit_url ?? "");
   const frequencyWeeks = params.frequency;
   const weekday = params.weekday;
   return {
@@ -183,30 +184,26 @@ function formatScheduleLabel({
  * The /api/v1/orders/ endpoint groups orders by month. Flatten and order
  * newest-first so callers don't have to know about the grouping.
  */
-export function parseOrdersResponse(data: unknown): Order[] {
-  const months = readPath<unknown[]>(data, "results") ?? [];
-  return months.flatMap((month) => {
-    const orders = readPath<unknown[]>(month, "orders") ?? [];
-    return compact(orders.map(toOrder));
-  });
+export function parseOrdersResponse(data: WireOrdersResponse): Order[] {
+  const months = data.results ?? [];
+  return months.flatMap((month) => compact((month.orders ?? []).map(toOrder)));
 }
 
-export function parseOrderDetail(data: unknown): OrderDetails | null {
-  const summary = readPath<unknown>(data, "summary");
-  const order = toOrder(summary);
+export function parseOrderDetail(data: WireOrderDetail): OrderDetails | null {
+  const order = data.summary ? toOrder(data.summary) : null;
   if (!order) return null;
 
-  const itemGroups = readPath<unknown[]>(data, "items.item_groups") ?? [];
+  const itemGroups = data.items?.item_groups ?? [];
   const lineItems = itemGroups.flatMap((group) => {
-    const category = readPath<string>(group, "name") ?? "";
-    const groupItems = readPath<unknown[]>(group, "items") ?? [];
-    return compact(groupItems.map((item) => toLineItem(item, category)));
+    const category = group.name ?? "";
+    return compact(
+      (group.items ?? []).map((item) => toLineItem(item, category)),
+    );
   });
 
   return {
     ...order,
-    productCount:
-      readPath<number>(data, "items.product_count") ?? lineItems.length,
+    productCount: data.items?.product_count ?? lineItems.length,
     items: lineItems,
   };
 }

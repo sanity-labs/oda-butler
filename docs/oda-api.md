@@ -1,100 +1,43 @@
 # Oda API notes
 
-Reverse-engineered against `oda.com` (Norwegian site) on 2025-12-XX while authenticated. All endpoints take session cookies (`csrftoken`, `sessionid`) and return JSON. The frontend speaks Django REST under the hood so payloads are `snake_case`.
+Reverse-engineered subset of `oda.com`'s private REST API used by oda-butler.
+
+The wire shapes (request bodies, response payloads, error formats) are described in [`oda-openapi.yaml`](./oda-openapi.yaml). TypeScript types are generated from that spec via `bun run gen:api-types`. This document covers conceptual gotchas that don't fit cleanly into OpenAPI: how endpoints relate, where data is _not_ served from, and operational quirks.
 
 ## Auth
 
-- `POST /api/v1/user/login/` — body `{username, password}`. Response has the session cookies.
-- All mutation endpoints want `X-CSRFToken: <csrftoken cookie>`, `Origin: https://oda.com`, and a `Referer` from the same origin.
+- `POST /api/v1/user/login/` returns the `csrftoken` and `sessionid` cookies. To get an initial CSRF cookie, GET any HTML page first (e.g. `/no/user/login/`).
+- Mutations require `X-CSRFToken: <csrftoken>`, `Origin: https://oda.com`, and a same-origin `Referer`.
 
 ## Products
 
-- `GET /no/search/products/?q={query}&page={n}` — HTML page, product list embedded in `__NEXT_DATA__` under `dehydratedState.queries[].queryKey[0]._id === "mixedSearch"` (or legacy `searchpageresponse`).
+There is no public products REST endpoint. Search results are embedded in the HTML response from `/no/search/products/` inside `<script id="__NEXT_DATA__">`. Look under `props.pageProps.dehydratedState.queries[]` for the entry whose `queryKey[0]._id` is `"mixedSearch"` (legacy: `"searchpageresponse"`). Each `items[]` entry has `type: "product"`; categories and banners interleave and should be skipped.
 
-## Cart
+## Next delivery
 
-- `GET /api/v1/cart/` — `{ id, label_text, product_quantity_count, total_gross_amount, items, groups: [{items: [...]}] }`.
-- `POST /api/v1/cart/items/` body `{ items: [{ product_id, quantity }] }` — add (positive quantity) or remove (negative quantity). Returns the updated cart.
+There is **no dedicated upcoming-delivery endpoint**. We derive it from `/api/v1/orders/`: pick the most recent order whose `tracking.step_name` is not a terminal state (`DELIVERED`, `CANCELLED`). If none, return `null`.
 
-## Orders
+## Recurring order: two surfaces, one is unused
 
-- `GET /api/v1/orders/` — paginated, returns `{ get_more_url, has_more, results: [{name: "Desember 2025", type: "month", gross_amount, currency, orders: [Order]}] }`. Pagination via `?through-date=YYYY-MM-DD`.
-- `GET /api/v1/orders/{order_number}/` — full detail: `{ info: [{key, title, content}], summary: Order, items: { product_count, item_groups: [{ type: "category", name, items: [LineItem] }] } }`.
+Oda has two unrelated surfaces both called "recurring":
 
-### Order shape (summary)
+### Consumer recurring cart (do not use on B2B)
 
-```json
-{
-  "order_number": "5fdnhy",
-  "status": {
-    "title": "Kvittering",
-    "payment_status_state": "payment_paid",
-    "can_be_ordered_again": true
-  },
-  "delivery": {
-    "delivery_address": "Seilduksgata 9A, 0553 Oslo",
-    "delivery_time": "man 1. desember, 18:53",
-    "status_text": "Bestillingen din er levert",
-    "tracking": {
-      "step_name": "DELIVERED",
-      "data": { "title": "...", "current_step_number": 4, "steps": [...] }
-    }
-  },
-  "gross_amount": 1224.7,
-  "currency": "NOK"
-}
-```
+- `GET /api/v1/cart/recurring/` and `POST /api/v1/cart/recurring/items/` exist and use the same shape as the regular cart. On B2B accounts they always return the empty cart shape (`product_quantity_count: 0`) regardless of the actual recurring order. Mutations against this endpoint update the consumer recurring cart, which the B2B UI ignores.
 
-`tracking.step_name` values seen: `DELIVERED`. The full lifecycle (per the steps array) is `Bekreftet` → `Pakkes` → `På vei` → `Levert`.
+### B2B product list with attached schedule (the real one)
 
-### Line item
+B2B accounts manage their recurring order as a _product list_ with an attached `recurring_order` object. The active recurring list is the entry in `GET /api/v1/product-lists/` whose `recurring_order.is_active === true`.
 
-```json
-{
-  "product_id": 8476,
-  "product_image": "https://...",
-  "description": "R Hakkede tomater Med basilikum og oregano, 390 g",
-  "quantity": 12,
-  "uncredited_quantity": 12,
-  "gross_amount": 201.6,
-  "currency": "NOK",
-  "vat_percentage": "15%",
-  "discount": null | { "is_discounted": true, "undiscounted_gross_price": "39.90", ... }
-}
-```
+Schedule fields (`frequency`, `weekday`, `next_date`) live on `recurring_order`. The cadence is encoded in `recurring_order.edit_url` as query params:
 
-## Next delivery / upcoming
+- `frequency` is the cadence in weeks (1 = weekly, 2 = biweekly, ...)
+- `weekday` is ISO 8601 day-of-week (1 = Monday ... 7 = Sunday)
+- `delivery_offering_id` is opaque
 
-There is **no dedicated upcoming-delivery endpoint**. The "next delivery" is whichever order in `/api/v1/orders/` has `tracking.step_name` other than `DELIVERED`/`CANCELLED`. The status text and tracking data tell you what stage it's in.
+Mutations go through `POST /api/v1/product-lists/{id}/products/` with a _top-level array_ of signed deltas (not `{ items: [...] }` like the cart). `OPTIONS` returns 405 with `Allow: POST`. The endpoint accepts changes to lists with or without an active recurring schedule.
 
-For our agent we infer "next delivery" by:
+## Useful HTML pages (Next.js data)
 
-1. Calling `/api/v1/orders/`.
-2. Picking the most recent order whose `tracking.step_name` is not a terminal state (`DELIVERED`, `CANCELLED`).
-3. If none: returning `null`.
-
-## Recurring order (faste varer)
-
-There are two recurring-order surfaces and they're easy to confuse:
-
-### Consumer (cart-style) — present but unused on B2B
-
-- `GET /api/v1/cart/recurring/` — same shape as the cart. On a B2B account this always returns the empty cart shape (`product_quantity_count: 0`), even when there is an active recurring order. Don't read from this for our use case.
-- `POST /api/v1/cart/recurring/items/` body `{ items: [{ product_id, quantity }] }` — same protocol as the regular cart (positive quantity to add, negative to remove). Mutates the consumer recurring cart, not the B2B list.
-
-### B2B (product-list) — the real one
-
-B2B accounts manage their recurring order as a _product list_ with an attached recurring schedule.
-
-- `GET /api/v1/product-lists/` — paginated index. Each result includes:
-  - `id`, `title`, `description`, `url`, `number_of_products`, `total_quantity`
-  - `recurring_order: { id, is_active, next_date, edit_url }` when scheduled
-  - `eligible_for_recurring_order: bool`
-- `GET /api/v1/product-lists/{id}/` — full list including `items: [{ product, quantity }, ...]`. Items use the same `snake_case` shape as cart items, so `parseCartResponse` works on `items`.
-- `recurring_order.edit_url` carries the schedule as query params: `?frequency=N&weekday=N&delivery_offering_id=N`. `frequency` is the cadence in weeks (1=weekly, 2=biweekly), `weekday` is ISO 1=Mon … 7=Sun. `next_date` is `YYYY-MM-DD`.
-- Mutations live under `/api/v1/product-lists/{id}/products/` (POST returns 405 on OPTIONS but is the path the UI uses). Not reverse-engineered yet because we don't need writes.
-
-## Useful HTML pages
-
-- `__NEXT_DATA__` on `/no/cart/` includes the `user` query (`firstName`, `lastName`, `email`).
-- Most account pages (`/no/account/`, `/no/account/orders/`) hold only `user`, `onboardingUrl`, `isHijacked`. Real data is loaded via REST after the page hydrates.
+- `__NEXT_DATA__` on `/no/cart/` contains the `user` query (`firstName`, `lastName`, `email`).
+- Account pages (`/no/account/`, `/no/account/orders/`) hold only `user`, `onboardingUrl`, `isHijacked`. Real data is fetched via REST after hydration.

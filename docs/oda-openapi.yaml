@@ -1,0 +1,494 @@
+openapi: 3.1.0
+info:
+  title: Oda (reverse-engineered)
+  version: 0.1.0
+  description: |
+    Reverse-engineered subset of oda.com's private REST API used by oda-butler.
+
+    Only the fields we read or write are documented. The real responses contain
+    many more fields (UI metadata, banners, certifications, etc.); TypeScript's
+    structural typing already lets unmodeled fields pass through, so schemas
+    here describe only the documented surface.
+
+    All endpoints require an authenticated session (cookies `csrftoken` and
+    `sessionid`). Mutations also require headers `X-CSRFToken: <csrftoken>`,
+    `Origin: https://oda.com`, and a same-origin `Referer`.
+
+servers:
+  - url: https://oda.com
+    description: Norwegian production site
+
+tags:
+  - name: auth
+    description: Session login
+  - name: products
+    description: Product catalog (search results live in Next.js page data, not REST)
+  - name: cart
+    description: One-off shopping cart (consumer)
+  - name: orders
+    description: Past and in-flight orders
+  - name: recurring-cart
+    description: Consumer recurring cart. Empty on B2B accounts; do not use.
+  - name: product-lists
+    description: B2B product lists, including the active recurring order
+
+paths:
+  /api/v1/user/login/:
+    post:
+      tags: [auth]
+      summary: Sign in with email and password
+      description: |
+        Sets `csrftoken` and `sessionid` cookies on success. Caller must first
+        GET any HTML page (e.g. `/no/user/login/`) to obtain a CSRF cookie.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string, format: email }
+                password: { type: string, format: password }
+      responses:
+        "200": { description: Authenticated; session cookies set on response }
+        "400": { description: Invalid credentials }
+
+  /no/search/products/:
+    get:
+      tags: [products]
+      summary: Product search (HTML page with embedded JSON)
+      description: |
+        Returns an HTML page. Product results are embedded in the
+        `__NEXT_DATA__` script tag under
+        `props.pageProps.dehydratedState.queries[]`, where `queryKey[0]._id`
+        is `"mixedSearch"` (or legacy `"searchpageresponse"`). Each `items[]`
+        entry has `type: "product"` (others — categories, banners — should
+        be skipped).
+      parameters:
+        - in: query
+          name: q
+          required: true
+          schema: { type: string }
+          description: Search query (Norwegian or English)
+        - in: query
+          name: page
+          required: false
+          schema: { type: integer, minimum: 1, default: 1 }
+      responses:
+        "200":
+          description: HTML page; relevant payload is in `__NEXT_DATA__`
+          content:
+            text/html:
+              schema:
+                type: string
+                description: HTML containing `<script id="__NEXT_DATA__">…</script>`
+
+  /api/v1/cart/:
+    get:
+      tags: [cart]
+      summary: Get the current cart
+      responses:
+        "200":
+          description: Cart contents
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Cart" }
+
+  /api/v1/cart/items/:
+    post:
+      tags: [cart]
+      summary: Mutate cart items (signed delta)
+      description: |
+        Positive `quantity` adds, negative removes. Negative beyond zero
+        clamps at zero (item disappears).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  items: { $ref: "#/components/schemas/ItemDelta" }
+      responses:
+        "200":
+          description: Updated cart
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Cart" }
+
+  /api/v1/orders/:
+    get:
+      tags: [orders]
+      summary: List past orders, grouped by month, newest first
+      parameters:
+        - in: query
+          name: through-date
+          required: false
+          schema: { type: string, format: date }
+          description: Pagination cursor; passed back in `get_more_url`.
+      responses:
+        "200":
+          description: Orders grouped by month
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrdersResponse" }
+
+  /api/v1/orders/{order_number}/:
+    get:
+      tags: [orders]
+      summary: Read one order with line items
+      parameters:
+        - in: path
+          name: order_number
+          required: true
+          schema: { type: string }
+          example: "5fdnhy"
+      responses:
+        "200":
+          description: Order detail
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrderDetail" }
+        "404": { description: Unknown order }
+
+  /api/v1/cart/recurring/:
+    get:
+      tags: [recurring-cart]
+      summary: Consumer recurring cart (do not use on B2B)
+      description: |
+        Same shape as `/api/v1/cart/`. On B2B accounts this always returns
+        the empty cart shape (`product_quantity_count: 0`) even when an
+        active recurring order exists. The B2B recurring order lives under
+        `/api/v1/product-lists/` instead.
+      responses:
+        "200":
+          description: Recurring cart
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Cart" }
+
+  /api/v1/cart/recurring/items/:
+    post:
+      tags: [recurring-cart]
+      summary: Mutate consumer recurring cart (do not use on B2B)
+      description: Same protocol as `/api/v1/cart/items/`. Signed delta.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  items: { $ref: "#/components/schemas/ItemDelta" }
+      responses:
+        "200":
+          description: Updated recurring cart
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Cart" }
+
+  /api/v1/product-lists/:
+    get:
+      tags: [product-lists]
+      summary: List the user's product lists (paginated)
+      description: |
+        On a B2B account, the *active recurring order* is the entry whose
+        `recurring_order.is_active` is true. Schedule details (cadence,
+        weekday, next delivery date) are attached to that entry.
+      responses:
+        "200":
+          description: Paginated list of product lists
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProductListsPage" }
+
+  /api/v1/product-lists/{id}/:
+    get:
+      tags: [product-lists]
+      summary: Read a product list with full items
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Product list with items
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProductList" }
+        "404": { description: Unknown list }
+
+  /api/v1/product-lists/{id}/products/:
+    post:
+      tags: [product-lists]
+      summary: Mutate a product list (signed delta)
+      description: |
+        Body is a *top-level array* (not `{ items: [...] }` like the cart).
+        Positive `quantity` adds (or creates an entry), negative removes.
+        Negative beyond zero clamps at zero. Adding to a list that has an
+        active recurring order applies on the next scheduled delivery.
+
+        `OPTIONS` returns `405 Allow: POST`.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: "#/components/schemas/ItemDelta" }
+      responses:
+        "200":
+          description: Updated product list (same shape as GET)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProductList" }
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ListError" }
+        "404":
+          description: Unknown list
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ListError" }
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: sessionid
+      description: Set by `POST /api/v1/user/login/`. Paired with `csrftoken` cookie.
+
+  schemas:
+    ItemDelta:
+      type: object
+      required: [product_id, quantity]
+      properties:
+        product_id: { type: integer, description: Oda product ID }
+        quantity:
+          type: integer
+          description: |
+            Signed delta. Positive adds, negative removes. Negative beyond
+            zero clamps at zero (item disappears from the list).
+      additionalProperties: false
+
+    Money:
+      type: string
+      pattern: "^-?[0-9]+(\\.[0-9]+)?$"
+      description: Decimal string, e.g. `"234.00"`. Currency is on the parent.
+      example: "234.00"
+
+    Product:
+      type: object
+      description: Product as embedded in cart and product-list items.
+      properties:
+        id: { type: integer }
+        full_name: { type: string }
+        name: { type: string }
+        name_extra: { type: string, description: Size or descriptor suffix }
+        brand: { type: string, nullable: true }
+        front_url: { type: string, format: uri }
+        absolute_url: { type: string, description: Path-relative product URL }
+        gross_price: { $ref: "#/components/schemas/Money" }
+        gross_unit_price: { $ref: "#/components/schemas/Money" }
+        unit_price_quantity_abbreviation:
+          type: string
+          description: e.g. `"kg"`, `"l"`
+        currency: { type: string, example: NOK }
+
+    CartItem:
+      type: object
+      required: [product, quantity]
+      properties:
+        product: { $ref: "#/components/schemas/Product" }
+        quantity: { type: integer, minimum: 1 }
+
+    Cart:
+      type: object
+      properties:
+        id: { type: integer }
+        product_quantity_count: { type: integer }
+        total_gross_amount: { $ref: "#/components/schemas/Money" }
+        currency: { type: string, example: NOK }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/CartItem" }
+          description: Top-level items (rare; usually empty in favor of `groups`)
+        groups:
+          type: array
+          description: Items grouped by Oda's UI buckets. Flatten via `groups[].items`.
+          items:
+            type: object
+            properties:
+              items:
+                type: array
+                items: { $ref: "#/components/schemas/CartItem" }
+
+    OrderTrackingStep:
+      type: string
+      description: |
+        Tracking step name. Known values: `CONFIRMED`, `PACKING`, `EN_ROUTE`,
+        `DELIVERED`, `CANCELLED`. Treated as open-ended because Oda may
+        introduce new states; consumers map unknown values to a fallback
+        ("OTHER" in our parsers). The lifecycle (per the `data.steps` array)
+        is Bekreftet → Pakkes → På vei → Levert. Only `DELIVERED` and
+        `CANCELLED` are terminal.
+      example: DELIVERED
+
+    OrderSummary:
+      type: object
+      required: [order_number]
+      properties:
+        order_number: { type: string, example: "5fdnhy" }
+        gross_amount: { type: number, format: double }
+        currency: { type: string, example: NOK }
+        delivery:
+          type: object
+          properties:
+            delivery_address: { type: string }
+            delivery_time:
+              type: string
+              description: Human-readable string, e.g. `"man 1. desember, 18:53"`.
+            status_text: { type: string }
+            tracking:
+              type: object
+              properties:
+                step_name: { $ref: "#/components/schemas/OrderTrackingStep" }
+
+    OrderMonth:
+      type: object
+      properties:
+        name: { type: string, example: "Desember 2025" }
+        type: { type: string, example: month }
+        gross_amount: { type: number, format: double }
+        currency: { type: string }
+        orders:
+          type: array
+          items: { $ref: "#/components/schemas/OrderSummary" }
+
+    OrdersResponse:
+      type: object
+      properties:
+        get_more_url: { type: string, nullable: true }
+        has_more: { type: boolean }
+        results:
+          type: array
+          items: { $ref: "#/components/schemas/OrderMonth" }
+
+    OrderLineItem:
+      type: object
+      required: [product_id]
+      properties:
+        product_id: { type: integer }
+        description: { type: string }
+        quantity: { type: integer }
+        gross_amount: { type: number, format: double }
+        currency: { type: string }
+        front_url: { type: string, nullable: true }
+        absolute_url: { type: string, nullable: true }
+
+    OrderItemGroup:
+      type: object
+      properties:
+        type: { type: string, example: category }
+        name: { type: string, description: Category name }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/OrderLineItem" }
+
+    OrderDetail:
+      type: object
+      properties:
+        summary: { $ref: "#/components/schemas/OrderSummary" }
+        items:
+          type: object
+          properties:
+            product_count: { type: integer }
+            item_groups:
+              type: array
+              items: { $ref: "#/components/schemas/OrderItemGroup" }
+
+    RecurringOrderMeta:
+      type: object
+      description: |
+        Recurring schedule attached to a product list. `edit_url` carries
+        the cadence as query params: `frequency` (weeks; 1=weekly,
+        2=biweekly), `weekday` (ISO 1=Mon … 7=Sun), and an opaque
+        `delivery_offering_id`.
+      properties:
+        id: { type: integer }
+        is_active: { type: boolean }
+        next_date: { type: string, format: date, nullable: true }
+        edit_url: { type: string, description: Path with query params }
+
+    ProductListSummary:
+      type: object
+      properties:
+        id: { type: integer }
+        title: { type: string }
+        description: { type: string }
+        url: { type: string, format: uri }
+        number_of_products: { type: integer }
+        total_quantity: { type: integer }
+        eligible_for_recurring_order: { type: boolean }
+        recurring_order:
+          oneOf:
+            - { $ref: "#/components/schemas/RecurringOrderMeta" }
+            - { type: "null" }
+
+    ProductList:
+      allOf:
+        - { $ref: "#/components/schemas/ProductListSummary" }
+        - type: object
+          properties:
+            is_recurring_order: { type: boolean }
+            is_active_recurring_order: { type: boolean }
+            currency: { type: string }
+            items:
+              type: array
+              items: { $ref: "#/components/schemas/CartItem" }
+
+    ProductListsPage:
+      type: object
+      properties:
+        next: { type: string, nullable: true }
+        previous: { type: string, nullable: true }
+        results:
+          type: array
+          items: { $ref: "#/components/schemas/ProductListSummary" }
+
+    ListError:
+      type: object
+      description: |
+        Validation error shape from `/api/v1/product-lists/{id}/products/`.
+        `errors` is an array of human-readable strings, e.g.
+        `["Invalid product"]`. `field_errors` keys errors by field name.
+      properties:
+        errors:
+          type: array
+          items: { type: string }
+        field_errors:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              message: { type: string }
+              code: { type: string }
+
+security:
+  - sessionCookie: []
