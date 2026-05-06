@@ -30,15 +30,20 @@ const fakeMessage = (overrides: {
   } as unknown as Message;
 };
 
-/** Minimal Thread shape with an `allMessages` async iterable. */
+/**
+ * Minimal Thread shape with a `messages` async iterable. The chat-sdk
+ * yields newest-first from `thread.messages`, so we iterate the history
+ * array in reverse here. `history` itself stays in chronological order
+ * for test readability.
+ */
 const fakeThread = (history: Message[]): Thread => {
   return {
     async *[Symbol.asyncIterator]() {
       // not used
     },
-    get allMessages() {
+    get messages() {
       return (async function* () {
-        for (const m of history) yield m;
+        for (let i = history.length - 1; i >= 0; i--) yield history[i];
       })();
     },
   } as unknown as Thread;
@@ -94,7 +99,19 @@ test("skips empty messages but keeps image-only ones", async () => {
 });
 
 test("inlines image attachments as base64 data URLs on the current message only", async () => {
-  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+  // Smallest viable PNG that sharp can actually decode and re-encode.
+  // Generated with `sharp({create: {2x2 red}}).png().toBuffer()`.
+  const png = Buffer.from([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+    0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02,
+    0x08, 0x02, 0x00, 0x00, 0x00, 0xfd, 0xd4, 0x9a, 0x73, 0x00, 0x00, 0x00,
+    0x09, 0x70, 0x48, 0x59, 0x73, 0x00, 0x00, 0x03, 0xe8, 0x00, 0x00, 0x03,
+    0xe8, 0x01, 0xb5, 0x7b, 0x52, 0x6b, 0x00, 0x00, 0x00, 0x13, 0x49, 0x44,
+    0x41, 0x54, 0x78, 0x9c, 0x63, 0xf8, 0xcf, 0xc0, 0xf0, 0x9f, 0x01, 0x8c,
+    0xff, 0x33, 0x30, 0x00, 0x00, 0x1f, 0xee, 0x03, 0xfd, 0x35, 0x1b, 0x00,
+    0x33, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60,
+    0x82,
+  ]);
   const olderImg = fakeMessage({
     id: "1700000001.000000",
     text: "look",
@@ -117,6 +134,7 @@ test("inlines image attachments as base64 data URLs on the current message only"
   const now = turns.find((t) => t.id === "1700000002.000000");
   expect(now?.content.experimental_attachments).toHaveLength(1);
   const att = now?.content.experimental_attachments?.[0];
+  // sharp re-encodes everything to JPEG regardless of input mime.
   expect(att?.contentType).toBe("image/jpeg");
   expect(att?.name).toBe("fridge.jpg");
   expect(att?.url).toMatch(/^data:image\/jpeg;base64,/);

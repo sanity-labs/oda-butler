@@ -20,8 +20,16 @@ function parseAllowedChannels(raw: string | undefined): Set<string> {
   return new Set(list);
 }
 
-/** Maximum prior messages to load from a thread when reconstructing context. */
-export const HISTORY_LIMIT = 20;
+/**
+ * Maximum prior messages to load from a thread when reconstructing context.
+ *
+ * Observational Memory compresses older history into dense observations
+ * once the conversation crosses ~30k tokens, so we no longer pay a token
+ * tax for long history and can pass the full thread. The cap is just a
+ * safety net for pathological threads (1000+ replies); we don't want to
+ * rebuild that much from Slack on every mention.
+ */
+export const HISTORY_LIMIT = 200;
 
 /**
  * Pool of food/grocery-themed loading messages. We sample up to 10 of these

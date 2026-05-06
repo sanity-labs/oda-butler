@@ -42,13 +42,30 @@ function productName(
  * Wrap an agent's `fullStream` so chat-sdk renders tool calls as inline
  * `task_update` cards (the native Slack timeline UI) instead of separate
  * Block Kit messages per tool.
+ *
+ * Returns the plan plus a `wasTextEmitted` getter so callers can tell
+ * whether the user already saw something useful before an error fired.
+ * Used by the mention handler to suppress the "something broke" apology
+ * when text was already streamed — the visible answer is more valuable
+ * than a follow-up apology that contradicts it.
  */
-export function asStreamingPlan(stream: AgentStream): StreamingPlan {
-  return new StreamingPlan(toChatChunks(stream), { groupTasks: "timeline" });
+export function asStreamingPlan(stream: AgentStream): {
+  plan: StreamingPlan;
+  wasTextEmitted: () => boolean;
+} {
+  let textEmitted = false;
+  const chunks = toChatChunks(stream, () => {
+    textEmitted = true;
+  });
+  return {
+    plan: new StreamingPlan(chunks, { groupTasks: "timeline" }),
+    wasTextEmitted: () => textEmitted,
+  };
 }
 
 async function* toChatChunks(
   stream: AgentStream,
+  onText: () => void,
 ): AsyncIterable<string | StreamChunk> {
   // The agent often emits text in segments interleaved with tool calls
   // ("On it!" → tool → "Done!"). Slack's stream API concatenates raw text
@@ -74,6 +91,7 @@ async function* toChatChunks(
       }
       needsSeparator = false;
       hasEmittedText = true;
+      onText();
       yield chunk.payload.text;
       continue;
     }

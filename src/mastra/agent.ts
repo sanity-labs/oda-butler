@@ -79,7 +79,23 @@ async function handleMention(thread: Thread, message: Message): Promise<void> {
       },
       requestContext,
     });
-    await thread.post(asStreamingPlan(stream.fullStream));
+    const { plan, wasTextEmitted } = asStreamingPlan(stream.fullStream);
+    try {
+      await thread.post(plan);
+    } catch (streamErr) {
+      // Errors that fire after the user has already seen text (e.g. a
+      // post-stream finalize, a 413 on the next turn, a Slack edit
+      // failure) get logged but not surfaced — dropping a "something
+      // broke" message under a perfectly good reply just confuses people.
+      logger.error("stream failed", {
+        channelId: thread.channelId,
+        threadId: thread.id,
+        messageId: message.id,
+        textEmitted: wasTextEmitted(),
+        error: streamErr,
+      });
+      if (!wasTextEmitted()) throw streamErr;
+    }
   } catch (err) {
     logger.error("mention handler failed", {
       channelId: thread.channelId,

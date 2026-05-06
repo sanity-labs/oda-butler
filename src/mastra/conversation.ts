@@ -1,8 +1,19 @@
 import type { Message, Thread } from "chat";
+import sharp from "sharp";
 import { logger } from "../lib/logger.ts";
 import { slackTsToDate, stripMentions } from "../lib/slack.ts";
 import { HISTORY_LIMIT } from "./constants.ts";
 import type { Turn } from "./types.ts";
+
+/**
+ * Slack photos arrive at full sensor resolution (often 3000–12000 px,
+ * 2–8 MB). Anthropic accepts up to ~5 MB per image and base64 inflates
+ * payload by ~33%, so even one fridge photo can push a request past the
+ * 413 cap once memory replay is included. 1024 px JPEG q80 is plenty
+ * for fridge-inventory questions and shrinks payload 5–15×.
+ */
+const MAX_IMAGE_DIM = 1024;
+const JPEG_QUALITY = 80;
 
 /**
  * Map a Slack thread to a list of conversation turns Mastra can pass to the
@@ -31,15 +42,20 @@ export async function buildConversation(
   thread: Thread,
   current: Message,
 ): Promise<Turn[]> {
+  // `thread.messages` iterates newest-first; we want the most recent
+  // HISTORY_LIMIT messages older than the mention. `thread.allMessages`
+  // iterates oldest-first, which silently truncates long threads to the
+  // first N replies and ignores everything that just happened.
   const currentTs = slackTsToDate(current.id).getTime();
   const collected: Message[] = [];
-  for await (const msg of thread.allMessages) {
+  for await (const msg of thread.messages) {
     if (collected.length >= HISTORY_LIMIT) break;
     if (msg.id === current.id) continue;
     if (slackTsToDate(msg.id).getTime() >= currentTs) continue;
     if (!hasContent(msg)) continue;
     collected.push(msg);
   }
+  collected.reverse();
   collected.push(current);
 
   return Promise.all(
@@ -121,13 +137,17 @@ async function fetchImageAttachments(
   const fetched = await Promise.all(
     images.map(async (att) => {
       try {
-        const buffer = att.data
-          ? toBuffer(att.data)
+        const raw = att.data
+          ? await toBuffer(att.data)
           : att.fetchData
             ? await att.fetchData()
             : null;
-        if (!buffer) return null;
-        const contentType = att.mimeType ?? "image/jpeg";
+        if (!raw) return null;
+        const { buffer, contentType } = await compressImage(
+          raw,
+          att.mimeType ?? "image/jpeg",
+          msg.id,
+        );
         const url = `data:${contentType};base64,${buffer.toString("base64")}`;
         return { name: att.name, contentType, url };
       } catch (err) {
@@ -146,4 +166,38 @@ async function fetchImageAttachments(
 async function toBuffer(data: Buffer | Blob): Promise<Buffer> {
   if (Buffer.isBuffer(data)) return data;
   return Buffer.from(await data.arrayBuffer());
+}
+
+async function compressImage(
+  raw: Buffer,
+  mimeType: string,
+  messageId: string,
+): Promise<{ buffer: Buffer; contentType: string }> {
+  try {
+    const buffer = await sharp(raw, { failOn: "none" })
+      // Apply EXIF orientation before resize so dimensions are post-rotation.
+      .rotate()
+      .resize({
+        width: MAX_IMAGE_DIM,
+        height: MAX_IMAGE_DIM,
+        fit: "inside",
+        withoutEnlargement: true,
+      })
+      .jpeg({ quality: JPEG_QUALITY, mozjpeg: true })
+      .toBuffer();
+    logger.debug("compressed image attachment", {
+      messageId,
+      originalBytes: raw.length,
+      compressedBytes: buffer.length,
+      ratio: Number((raw.length / buffer.length).toFixed(2)),
+    });
+    return { buffer, contentType: "image/jpeg" };
+  } catch (err) {
+    logger.warn("image compression failed; using original", {
+      messageId,
+      bytes: raw.length,
+      error: err,
+    });
+    return { buffer: raw, contentType: mimeType };
+  }
 }
