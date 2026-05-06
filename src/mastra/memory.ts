@@ -2,16 +2,17 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { LibSQLStore } from "@mastra/libsql";
 import { Memory } from "@mastra/memory";
+import { config } from "../config.ts";
 
-const databaseUrl = process.env.ODA_BOT_DB_URL ?? "file:./data/oda.db";
-
-if (databaseUrl.startsWith("file:")) {
-  mkdirSync(dirname(databaseUrl.slice("file:".length)), { recursive: true });
+if (config.database.url.startsWith("file:")) {
+  mkdirSync(dirname(config.database.url.slice("file:".length)), {
+    recursive: true,
+  });
 }
 
 export const storage = new LibSQLStore({
   id: "oda-storage",
-  url: databaseUrl,
+  url: config.database.url,
 });
 
 /**

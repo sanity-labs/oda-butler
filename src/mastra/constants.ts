@@ -1,26 +1,4 @@
 /**
- * Channels where the bot is allowed to respond to mentions.
- *
- * Configured via the `ALLOWED_CHANNELS` env var as a comma-separated list of
- * channel names (with or without a leading `#`). Falls back to the office
- * defaults when unset so a missing env var doesn't break local dev.
- */
-export const ALLOWED_CHANNELS = parseAllowedChannels(
-  process.env.ALLOWED_CHANNELS,
-);
-
-function parseAllowedChannels(raw: string | undefined): Set<string> {
-  const fallback = ["oslo-office-internal", "test-content-agent"];
-  const list = raw
-    ? raw
-        .split(",")
-        .map((entry) => entry.trim().replace(/^#/, ""))
-        .filter(Boolean)
-    : fallback;
-  return new Set(list);
-}
-
-/**
  * Maximum prior messages to load from a thread when reconstructing context.
  *
  * Observational Memory compresses older history into dense observations

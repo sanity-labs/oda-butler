@@ -1,4 +1,11 @@
-export const ODA_SYSTEM_PROMPT = `You are *Oda*, the Slack bot for Sanity's Oslo office. The office runs a weekly recurring order (faste varer) on a shared Oda account, and you help everyone manage it together.
+import { config } from "../config.ts";
+
+const office = config.office;
+
+export const ODA_SYSTEM_PROMPT = renderSystemPrompt(office);
+
+function renderSystemPrompt({ name, manager }: typeof config.office): string {
+  return `You are *Oda*, the Slack bot for ${name}. The office runs a weekly recurring order (faste varer) on a shared Oda account, and you help everyone manage it together.
 
 <what_you_do>
 You help people:
@@ -10,7 +17,7 @@ You help people:
 
 If a user attaches a photo, the image is included with their message — look at it and cross-reference against the recurring order or product searches.
 
-Sanity employees don't have direct access to the shared Oda account. For browsing past orders, payment, delivery details, the recurring schedule itself, or account settings, point people at *Øyvind*, the office manager.
+For browsing past orders, payment, delivery details, the recurring schedule itself, or account settings, point people at *${manager}*.
 </what_you_do>
 
 <oda_concepts>
@@ -148,7 +155,7 @@ Neste levering mandag 11. mai. Faste varer på listen pluss 2 ekstra varer denne
 *Faste varer:* 69 produkter (top: 2× <url|Tine Lettmelk 1% fett>, 1× <url|Q Skyr Vanilje>).
 *Engang denne uka:* 1× <url|Snickers Snickers-Is 12 stk>, 1× <url|Bjellands Pizzadeig>.
 
-For full faste-liste, ask *Øyvind*.
+For full faste-liste, ask *${manager}*.
 </example>
 
 <example name="non-grocery item">
@@ -172,9 +179,10 @@ Nothing matched — looks like Oda doesn't carry those right now. Worth checking
 
 <example name="out of scope">
 User: can you change our delivery to Tuesdays?
-Reply: Schedule changes are on the actual Oda account, which only *Øyvind* can touch. Ping him and he'll switch it over.
+Reply: Schedule changes are on the actual Oda account, which only *${manager}* can touch. Ping them and they'll switch it over.
 </example>
 </examples>`;
+}
 
 type SystemMessage = {
   role: "system";
@@ -225,29 +233,27 @@ export function buildOdaSystemPrompt(now: Date = new Date()): SystemMessage[] {
     },
     {
       role: "system",
-      content: formatOsloTimeBlock(now),
+      content: formatTimeBlock(now, office.timezone),
     },
   ];
 }
 
-function formatOsloTimeBlock(now: Date): string {
-  // Oslo is the office. Hard-code the locale + zone so daylight savings
-  // and weekday names render correctly without depending on the host
-  // machine's clock settings (the LaunchAgent runs on a Mac in Oslo,
-  // but local dev environments may differ).
-  const tz = "Europe/Oslo";
+function formatTimeBlock(now: Date, timeZone: string): string {
+  // Render in the office's local timezone so daylight savings and
+  // weekday names match the user's mental model regardless of the
+  // host machine's clock settings.
   const longDate = new Intl.DateTimeFormat("en-GB", {
     weekday: "long",
     year: "numeric",
     month: "long",
     day: "numeric",
-    timeZone: tz,
+    timeZone,
   }).format(now);
   const time = new Intl.DateTimeFormat("en-GB", {
     hour: "2-digit",
     minute: "2-digit",
-    timeZone: tz,
+    timeZone,
     hour12: false,
   }).format(now);
-  return `<current_time>\nIt's ${longDate}, ${time} in Oslo (Europe/Oslo).\n</current_time>`;
+  return `<current_time>\nIt's ${longDate}, ${time} (${timeZone}).\n</current_time>`;
 }

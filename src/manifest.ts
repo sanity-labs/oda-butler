@@ -11,7 +11,7 @@ export default {
     },
     assistant_view: {
       assistant_description:
-        "Grocery shopping assistant for the Oslo office. Search products, manage the shared cart, and track Oda deliveries.",
+        "Grocery shopping assistant for the office. Search products, manage the shared cart, and track Oda deliveries.",
     },
   },
   oauth_config: {

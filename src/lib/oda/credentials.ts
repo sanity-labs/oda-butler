@@ -1,3 +1,5 @@
+import { config } from "../../config.ts";
+
 export type Credentials = { email: string; password: string };
 
 /**
@@ -7,8 +9,7 @@ export type Credentials = { email: string; password: string };
  * `bun run oda:login` manually.
  */
 export function loadCredentials(): Credentials | null {
-  const email = process.env.ODA_EMAIL;
-  const password = process.env.ODA_PASSWORD;
+  const { email, password } = config.oda;
   if (!email || !password) return null;
   return { email, password };
 }

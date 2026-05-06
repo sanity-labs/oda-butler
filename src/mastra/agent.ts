@@ -3,14 +3,10 @@ import { Agent } from "@mastra/core/agent";
 import { RequestContext } from "@mastra/core/request-context";
 import type { Message, Thread } from "chat";
 import { sampleSize } from "es-toolkit";
-import { requireEnv } from "../lib/env.ts";
+import { config } from "../config.ts";
 import { logger } from "../lib/logger.ts";
 import { decodeSlackThreadId } from "../lib/slack.ts";
-import {
-  ALLOWED_CHANNELS,
-  LOADING_MESSAGE_LIMIT,
-  LOADING_MESSAGE_POOL,
-} from "./constants.ts";
+import { LOADING_MESSAGE_LIMIT, LOADING_MESSAGE_POOL } from "./constants.ts";
 import { buildConversation } from "./conversation.ts";
 import { buildOdaSystemPrompt } from "./instructions.ts";
 import { memory } from "./memory.ts";
@@ -27,6 +23,8 @@ import {
   updateRecurringItem,
 } from "./tools/recurring.ts";
 
+const ALLOWED_CHANNELS = new Set(config.slack.allowedChannels);
+
 async function isAllowedChannel(thread: Thread): Promise<boolean> {
   const info = await thread.channel.fetchMetadata();
   if (info.isDM) return false;
@@ -35,6 +33,12 @@ async function isAllowedChannel(thread: Thread): Promise<boolean> {
 }
 
 async function rejectChannel(thread: Thread): Promise<void> {
+  if (ALLOWED_CHANNELS.size === 0) {
+    await thread.post(
+      "I'm not configured to respond anywhere yet. Set the `ALLOWED_CHANNELS` env var to a comma-separated list of Slack channel names.",
+    );
+    return;
+  }
   const channelList = [...ALLOWED_CHANNELS].map((c) => `#${c}`).join(" or ");
   await thread.post(`Sorry, I can only be used in ${channelList}.`);
 }
@@ -177,8 +181,8 @@ export const odaAgent = new Agent({
     adapters: {
       slack: createSlackAdapter({
         mode: "socket",
-        appToken: requireEnv("SLACK_APP_TOKEN"),
-        botToken: requireEnv("SLACK_BOT_TOKEN"),
+        appToken: config.slack.appToken,
+        botToken: config.slack.botToken,
       }),
     },
     // Mastra auto-injects add_reaction / remove_reaction tools so the

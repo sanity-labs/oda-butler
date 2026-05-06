@@ -63,6 +63,18 @@ bun run oda:logout   # clear stored cookies
 
 If you'd rather not put credentials in `.env`, omit `ODA_EMAIL`/`ODA_PASSWORD` and run `bun run oda:login` once manually. The bot will keep working until the session expires; then you'll see an `OdaSessionExpiredError` and need to re-run the login command.
 
+### Office identity
+
+The agent's replies feel native when you tell it who runs the show:
+
+```sh
+OFFICE_NAME="Acme's Oslo office"
+OFFICE_MANAGER="Sara, the office manager"
+OFFICE_TIMEZONE=Europe/Oslo
+```
+
+All three are optional. Without them, the bot says "the office" and "your office's Oda admin", which works but reads generically. The timezone drives the `<current_time>` block the agent sees on every turn, so set it to the office's actual zone for accurate "when's the next delivery" answers.
+
 ## How it's wired
 
 - **Mastra** drives the agent: tools, memory, model routing, channel adapters.
@@ -108,8 +120,10 @@ After that, deploys verify the remote `.env` exists and refuse to run if it does
 src/
   index.ts                 # entry point + graceful shutdown
   manifest.ts              # Slack app manifest definition
+  config.ts                # validated env → typed config singleton
+  types/
+    config.ts              # Zod schema for AppConfig
   lib/
-    env.ts                 # requireEnv
     logger.ts              # shared Mastra ConsoleLogger
     slack.ts               # stripMentions, slackTsToDate, decodeSlackThreadId
     oda/
@@ -121,7 +135,7 @@ src/
   mastra/
     agent.ts               # mention handler + agent definition
     instructions.ts        # system prompt
-    constants.ts           # ALLOWED_CHANNELS, HISTORY_LIMIT, LOADING_MESSAGE_POOL
+    constants.ts           # HISTORY_LIMIT, LOADING_MESSAGE_POOL
     types.ts               # Turn (Mastra DB shape)
     conversation.ts        # Slack thread → Mastra conversation
     streaming.ts           # tool-call → Slack task_update card translation
