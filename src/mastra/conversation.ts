@@ -59,10 +59,6 @@ async function toModelMessage(
   const text = stripMentions(msg.text).trim();
   const createdAt = slackTsToDate(msg.id);
   const role = msg.author.isMe ? "assistant" : "user";
-  const speaker = msg.author.isMe
-    ? null
-    : msg.author.fullName || msg.author.userName;
-  const display = speaker ? `${speaker}: ${text}` : text;
 
   const attachments = inlineImages ? await fetchImageAttachments(msg) : [];
 
@@ -72,12 +68,50 @@ async function toModelMessage(
     createdAt,
     content: {
       format: 2,
-      parts: [{ type: "text", text: display }],
+      parts: [{ type: "text", text: renderMessage(msg, text, role) }],
       ...(attachments.length > 0 && {
         experimental_attachments: attachments,
       }),
     },
   };
+}
+
+/**
+ * Wrap each turn with a small XML envelope carrying the Slack message id
+ * and (for non-bot users) the speaker. The id is what `add_reaction` needs
+ * to react to a specific message; the speaker prefix lets the agent tell
+ * people apart in multi-person threads. Assistant turns don't need a
+ * speaker tag (it's always us) but get the id so the agent can correlate
+ * its own past replies if needed.
+ */
+function renderMessage(
+  msg: Message,
+  text: string,
+  role: "user" | "assistant",
+): string {
+  if (role === "assistant") {
+    return `<message id="${msg.id}">\n${text}\n</message>`;
+  }
+  const speaker = msg.author.fullName || msg.author.userName;
+  const speakerAttr = speaker ? ` from="${escapeAttr(speaker)}"` : "";
+  return `<message id="${msg.id}"${speakerAttr}>\n${text}\n</message>`;
+}
+
+function escapeAttr(value: string): string {
+  return value.replace(/["&<>]/g, (c) => {
+    switch (c) {
+      case '"':
+        return "&quot;";
+      case "&":
+        return "&amp;";
+      case "<":
+        return "&lt;";
+      case ">":
+        return "&gt;";
+      default:
+        return c;
+    }
+  });
 }
 
 async function fetchImageAttachments(
