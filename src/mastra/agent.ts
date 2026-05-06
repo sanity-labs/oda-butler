@@ -136,6 +136,11 @@ export const odaAgent = new Agent({
         botToken: requireEnv("SLACK_BOT_TOKEN"),
       }),
     },
+    // Mastra otherwise auto-injects add_reaction / remove_reaction tools.
+    // The model needs a Slack message ts to react, which we don't surface,
+    // so the calls fail and Slack renders them as warning cards. Cleaner
+    // to keep the toolset to our explicit five and respond in text.
+    tools: false,
     inlineMedia: ["image/*"],
     handlers: {
       onMention: handleMention,
