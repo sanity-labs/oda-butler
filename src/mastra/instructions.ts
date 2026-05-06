@@ -190,3 +190,41 @@ Reply: Schedule changes are on the actual Oda account, which only *Øyvind* can 
 <persistence>
 The Slack thread is the conversation history. Re-read it before acting; don't re-search for something already covered earlier in the thread.
 </persistence>`;
+
+/**
+ * Build the system prompt with a `<current_time>` block prepended.
+ *
+ * The agent needs to know what "today" is to answer questions like
+ * "when's the next delivery?" relative to now, and to anchor temporal
+ * statements in the recurring-order schedule. Computing this at agent
+ * construction time would freeze the value to whenever the process
+ * started, so we resolve it per call by passing this builder as the
+ * `instructions` function on the Agent — Mastra re-evaluates it on
+ * every stream/generate.
+ */
+export function buildOdaSystemPrompt(now: Date = new Date()): string {
+  const timeBlock = formatOsloTimeBlock(now);
+  return `${timeBlock}\n\n${ODA_SYSTEM_PROMPT}`;
+}
+
+function formatOsloTimeBlock(now: Date): string {
+  // Oslo is the office. Hard-code the locale + zone so daylight savings
+  // and weekday names render correctly without depending on the host
+  // machine's clock settings (the LaunchAgent runs on a Mac in Oslo,
+  // but local dev environments may differ).
+  const tz = "Europe/Oslo";
+  const longDate = new Intl.DateTimeFormat("en-GB", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    timeZone: tz,
+  }).format(now);
+  const time = new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: tz,
+    hour12: false,
+  }).format(now);
+  return `<current_time>\nIt's ${longDate}, ${time} in Oslo (Europe/Oslo).\n</current_time>`;
+}

@@ -12,7 +12,7 @@ import {
   LOADING_MESSAGE_POOL,
 } from "./constants.ts";
 import { buildConversation } from "./conversation.ts";
-import { ODA_SYSTEM_PROMPT } from "./instructions.ts";
+import { buildOdaSystemPrompt } from "./instructions.ts";
 import { memory } from "./memory.ts";
 import { asStreamingPlan } from "./streaming.ts";
 import { getProduct, searchProducts } from "./tools/products.ts";
@@ -153,7 +153,9 @@ async function setLoadingStatus(thread: Thread): Promise<void> {
 export const odaAgent = new Agent({
   id: "oda",
   name: "Oda",
-  instructions: ODA_SYSTEM_PROMPT,
+  // Function form so Mastra re-evaluates per turn; otherwise the
+  // current-time block freezes to whenever the process started.
+  instructions: () => buildOdaSystemPrompt(),
   model: "anthropic/claude-sonnet-4-6",
   memory,
   tools: {
