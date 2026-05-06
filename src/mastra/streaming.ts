@@ -79,6 +79,7 @@ async function* toChatChunks(
     }
 
     if (chunk.type === "tool-call") {
+      if (isHiddenTool(chunk.payload.toolName)) continue;
       needsSeparator = true;
       yield {
         type: "task_update",
@@ -94,8 +95,9 @@ async function* toChatChunks(
     }
 
     if (chunk.type === "tool-result") {
-      needsSeparator = true;
       harvestProductNames(chunk.payload.result, productNames);
+      if (isHiddenTool(chunk.payload.toolName)) continue;
+      needsSeparator = true;
       yield {
         type: "task_update",
         id: chunk.payload.toolCallId,
@@ -108,6 +110,18 @@ async function* toChatChunks(
       };
     }
   }
+}
+
+/**
+ * Tools whose cards we suppress in the Slack UI. The tools still execute,
+ * but they don't render as `task_update` blocks. Reactions are useful but
+ * read as visual noise when they show up as a tool card next to the bot's
+ * actual reply.
+ */
+const HIDDEN_TOOLS = new Set(["add_reaction", "remove_reaction"]);
+
+function isHiddenTool(name: string): boolean {
+  return HIDDEN_TOOLS.has(name);
 }
 
 /**
