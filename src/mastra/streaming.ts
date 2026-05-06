@@ -1,5 +1,6 @@
 import type { ChunkType } from "@mastra/core/stream";
 import { type StreamChunk, StreamingPlan } from "chat";
+import { logger } from "../lib/logger.ts";
 
 type AgentStream = AsyncIterable<ChunkType>;
 
@@ -143,8 +144,44 @@ async function* toChatChunks(
         ),
         status: chunk.payload.isError ? "error" : "complete",
       };
+      continue;
+    }
+
+    if (chunk.type === "finish") {
+      logCacheStats(chunk);
     }
   }
+}
+
+/**
+ * Log Anthropic prompt-cache hit/miss stats so we can see whether the
+ * static-prefix cache is working in production. The static prompt is
+ * ~10k tokens; a cache hit costs 10% of base input. With Sonnet 4.6 at
+ * $3/MTok base, that's ~$0.027 saved per hit.
+ *
+ * `inputTokenDetails` may not be populated by every provider/version;
+ * we coalesce to 0 and only log when there's something to report so
+ * we don't spam logs for non-Anthropic runs (background OM Observer
+ * uses Haiku, etc.).
+ */
+function logCacheStats(chunk: ChunkType): void {
+  if (chunk.type !== "finish") return;
+  const usage = chunk.payload?.output?.usage;
+  if (!usage) return;
+  const details =
+    (usage as { inputTokenDetails?: Record<string, number | undefined> })
+      .inputTokenDetails ?? {};
+  const cacheRead = details.cacheReadTokens ?? 0;
+  const cacheWrite = details.cacheWriteTokens ?? 0;
+  const noCache = details.noCacheTokens ?? 0;
+  if (cacheRead === 0 && cacheWrite === 0) return;
+  logger.info("prompt cache", {
+    cacheReadTokens: cacheRead,
+    cacheWriteTokens: cacheWrite,
+    noCacheTokens: noCache,
+    totalInputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+  });
 }
 
 /**

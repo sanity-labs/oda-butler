@@ -288,20 +288,53 @@ Reply: Schedule changes are on the actual Oda account, which only *Øyvind* can 
 The Slack thread is the conversation history. Re-read it before acting; don't re-search for something already covered earlier in the thread.
 </persistence>`;
 
+type SystemMessage = {
+  role: "system";
+  content: string;
+  providerOptions?: {
+    anthropic?: {
+      cacheControl?: { type: "ephemeral"; ttl?: "5m" | "1h" };
+    };
+  };
+};
+
 /**
- * Build the system prompt with a `<current_time>` block prepended.
+ * Build the system prompt as an array of two messages so the static
+ * prefix can be cached separately from the per-turn timestamp.
  *
- * The agent needs to know what "today" is to answer questions like
- * "when's the next delivery?" relative to now, and to anchor temporal
- * statements in the recurring-order schedule. Computing this at agent
- * construction time would freeze the value to whenever the process
- * started, so we resolve it per call by passing this builder as the
- * `instructions` function on the Agent — Mastra re-evaluates it on
- * every stream/generate.
+ * Anthropic's prompt cache hashes the prefix up to and including the
+ * block marked with `cacheControl`. If the timestamp lived inside that
+ * cached block, every minute would produce a different hash and the
+ * cache would never hit (Anthropic's docs flag this exact mistake).
+ * So: static prompt first with `cacheControl`, time block second
+ * (uncached suffix) before the message history.
+ *
+ * Tools and the cached system block ride together — cache prefixes go
+ * `tools → system → messages`, so one breakpoint at the end of the
+ * static system message captures both. Cache hits cost 10% of base
+ * input tokens; for a ~10k-token static prefix that's ~$0.027 saved
+ * per hit on Sonnet 4.6.
+ *
+ * Mastra re-evaluates this builder on every stream/generate via the
+ * function form of `instructions`, so the timestamp stays fresh
+ * without touching the cached block.
  */
-export function buildOdaSystemPrompt(now: Date = new Date()): string {
-  const timeBlock = formatOsloTimeBlock(now);
-  return `${timeBlock}\n\n${ODA_SYSTEM_PROMPT}`;
+export function buildOdaSystemPrompt(now: Date = new Date()): SystemMessage[] {
+  return [
+    {
+      role: "system",
+      content: ODA_SYSTEM_PROMPT,
+      providerOptions: {
+        anthropic: {
+          cacheControl: { type: "ephemeral" },
+        },
+      },
+    },
+    {
+      role: "system",
+      content: formatOsloTimeBlock(now),
+    },
+  ];
 }
 
 function formatOsloTimeBlock(now: Date): string {
