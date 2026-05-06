@@ -6,27 +6,21 @@
  *
  * Defaults to `autofoos@autofoos-mac.local`. Assumes:
  * - bun is installed on the remote at ~/.bun/bin/bun
- * - the local .env contains the secrets you want deployed
+ * - the remote already has a populated `.env` at the install path
+ *   (see README for the bootstrap step). The deploy never touches it.
  *
  * What it does:
- * 1. rsyncs the working tree (sans node_modules / data / .git) to ~/src/oda-butler
- * 2. copies the local .env to the same directory
- * 3. runs `bun install` on the remote
- * 4. writes a LaunchAgent plist and (re)loads it via launchctl
+ * 1. rsyncs the working tree (sans node_modules / data / .git / .env) to ~/src/oda-butler
+ * 2. runs `bun install` on the remote
+ * 3. writes a LaunchAgent plist and (re)loads it via launchctl
  */
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 
 const HOST = process.argv[2] ?? "autofoos@autofoos-mac.local";
 const REMOTE_DIR = "~/src/oda-butler";
 const LABEL = "com.autofoos.oda-butler";
 const PROJECT_ROOT = resolve(import.meta.dir, "..");
-
-if (!existsSync(`${PROJECT_ROOT}/.env`)) {
-  console.error("✗ no .env found in project root");
-  process.exit(1);
-}
 
 const ssh = (cmd: string) => {
   const result = spawnSync("ssh", [HOST, cmd], { stdio: "inherit" });
@@ -45,6 +39,19 @@ const sshCapture = (cmd: string) => {
 
 console.log(`→ deploying to ${HOST}`);
 
+console.log("→ verifying remote .env");
+const envCheck = spawnSync(
+  "ssh",
+  [HOST, `test -s ${REMOTE_DIR}/.env && echo present || echo missing`],
+  { encoding: "utf8" },
+);
+if (envCheck.stdout.trim() !== "present") {
+  console.error(
+    `✗ ${REMOTE_DIR}/.env is missing or empty on ${HOST}.\n  Bootstrap once with: scp .env ${HOST}:${REMOTE_DIR}/.env && ssh ${HOST} 'chmod 600 ${REMOTE_DIR}/.env'\n  After that, deploys leave the remote .env alone.`,
+  );
+  process.exit(1);
+}
+
 console.log("→ syncing source");
 const rsync = spawnSync(
   "rsync",
@@ -54,6 +61,7 @@ const rsync = spawnSync(
     "--exclude=node_modules",
     "--exclude=data",
     "--exclude=.git",
+    "--exclude=.env",
     "--exclude=.DS_Store",
     "--exclude=*.log",
     `${PROJECT_ROOT}/`,
@@ -64,17 +72,6 @@ const rsync = spawnSync(
 if (rsync.status !== 0) {
   throw new Error("rsync failed");
 }
-
-console.log("→ copying .env");
-const envCopy = spawnSync(
-  "scp",
-  ["-q", `${PROJECT_ROOT}/.env`, `${HOST}:${REMOTE_DIR}/.env`],
-  { stdio: "inherit" },
-);
-if (envCopy.status !== 0) {
-  throw new Error("scp .env failed");
-}
-ssh(`chmod 600 ${REMOTE_DIR}/.env`);
 
 console.log("→ installing dependencies");
 ssh(
