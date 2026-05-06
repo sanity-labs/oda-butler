@@ -1,5 +1,6 @@
 import { createSlackAdapter, type SlackAdapter } from "@chat-adapter/slack";
 import { Agent } from "@mastra/core/agent";
+import { RequestContext } from "@mastra/core/request-context";
 import type { Message, Thread } from "chat";
 import { sampleSize } from "es-toolkit";
 import { requireEnv } from "../lib/env.ts";
@@ -54,11 +55,29 @@ async function handleMention(thread: Thread, message: Message): Promise<void> {
 
     await setLoadingStatus(thread);
 
+    // Mastra's auto-injected channel tools (add_reaction etc.) read the
+    // current channel/thread/message from requestContext.channel. When we
+    // call agent.stream() ourselves we have to populate it; the default
+    // Mastra chat handler does this for us, but our custom handleMention
+    // bypasses that path.
+    const requestContext = new RequestContext();
+    requestContext.set("channel", {
+      platform: "slack",
+      eventType: "mention",
+      isDM: false,
+      threadId: thread.id,
+      channelId: thread.channelId,
+      messageId: message.id,
+      userId: message.author.userId,
+      userName: message.author.userName,
+    });
+
     const stream = await odaAgent.stream(messages, {
       memory: {
         thread: { id: thread.id, resourceId: `slack:${thread.channelId}` },
         resource: `slack:${thread.channelId}`,
       },
+      requestContext,
     });
     await thread.post(asStreamingPlan(stream.fullStream));
   } catch (err) {
