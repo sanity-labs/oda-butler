@@ -26,6 +26,7 @@ import {
 } from "./parsers.ts";
 import type {
   CartItem,
+  CartQuantityChange,
   Order,
   OrderDetails,
   ProductDetails,
@@ -113,8 +114,20 @@ export class OdaClient {
   }
 
   async getCart(): Promise<CartItem[]> {
+    const snapshot = await this.#getCartSnapshot();
+    return snapshot.items;
+  }
+
+  async #getCartSnapshot(): Promise<{
+    items: CartItem[];
+    productCount: number;
+  }> {
     const data = await this.#getJson<WireCart>(CART_API);
-    return data ? parseCartResponse(data) : [];
+    if (!data) return { items: [], productCount: 0 };
+    return {
+      items: parseCartResponse(data),
+      productCount: data.product_quantity_count ?? 0,
+    };
   }
 
   async addToCart(productId: number, quantity = 1): Promise<void> {
@@ -131,6 +144,55 @@ export class OdaClient {
       `${ODA_BASE_URL}/cart/`,
     );
     await ensureOk(response, "Remove from cart");
+  }
+
+  /**
+   * Set a product to an exact target quantity in the regular cart.
+   * Idempotent: calling with `quantity: 3` always lands on 3 regardless
+   * of the previous state. Quantity 0 removes the product. Mirrors
+   * `setRecurringQuantity` so callers can use the same pattern for both
+   * the recurring list and the per-delivery cart.
+   *
+   * On Oda B2B accounts, the regular cart represents one-off additions
+   * to the next scheduled delivery. Items here ride along with that
+   * delivery once and don't recur.
+   */
+  async setCartQuantity(
+    productId: number,
+    quantity: number,
+  ): Promise<CartQuantityChange> {
+    if (quantity < 0 || !Number.isInteger(quantity)) {
+      throw new Error("quantity must be a non-negative integer");
+    }
+    const before = await this.#getCartSnapshot();
+    const beforeItem = before.items.find((i) => i.id === productId);
+    const previousQuantity = beforeItem?.quantity ?? 0;
+    const delta = quantity - previousQuantity;
+    if (delta === 0) {
+      return {
+        cart: before.items,
+        productCount: before.productCount,
+        productId,
+        name: beforeItem?.name ?? null,
+        previousQuantity,
+        quantity,
+      };
+    }
+    if (delta > 0) {
+      await this.addToCart(productId, delta);
+    } else {
+      await this.removeFromCart(productId, -delta);
+    }
+    const after = await this.#getCartSnapshot();
+    const afterItem = after.items.find((i) => i.id === productId);
+    return {
+      cart: after.items,
+      productCount: after.productCount,
+      productId,
+      name: afterItem?.name ?? beforeItem?.name ?? null,
+      previousQuantity,
+      quantity: afterItem?.quantity ?? 0,
+    };
   }
 
   async getOrders(): Promise<Order[]> {

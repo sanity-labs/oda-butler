@@ -15,6 +15,11 @@ import { buildConversation } from "./conversation.ts";
 import { buildOdaSystemPrompt } from "./instructions.ts";
 import { memory } from "./memory.ts";
 import { asStreamingPlan } from "./streaming.ts";
+import {
+  addToNextDelivery,
+  getNextDeliveryExtras,
+  removeFromNextDelivery,
+} from "./tools/cart.ts";
 import { getProduct, searchProducts } from "./tools/products.ts";
 import {
   getRecurringOrder,
@@ -164,6 +169,9 @@ export const odaAgent = new Agent({
     get_recurring_order: getRecurringOrder,
     update_recurring_item: updateRecurringItem,
     remove_recurring_item: removeRecurringItem,
+    get_next_delivery_extras: getNextDeliveryExtras,
+    add_to_next_delivery: addToNextDelivery,
+    remove_from_next_delivery: removeFromNextDelivery,
   },
   channels: {
     adapters: {

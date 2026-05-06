@@ -28,6 +28,23 @@ const TOOL_LABELS: Record<string, LabelFn> = {
     const name = productName(a, names);
     return name ? `Removing ${name}` : "Removing from the recurring order";
   },
+  get_next_delivery_extras: () => "Checking next delivery extras",
+  add_to_next_delivery: (a, names) => {
+    const name = productName(a, names);
+    const target = name ? ` ${name}` : "";
+    const qty = a.quantity;
+    if (typeof qty !== "number") return `Adding${target} to next delivery`;
+    if (qty === 1) return `Adding${target || " extras"} to next delivery`;
+    return name
+      ? `Setting ${name} to ${qty} for next delivery`
+      : `Setting quantity to ${qty} for next delivery`;
+  },
+  remove_from_next_delivery: (a, names) => {
+    const name = productName(a, names);
+    return name
+      ? `Removing ${name} from next delivery`
+      : "Removing from next delivery";
+  },
 };
 
 function productName(

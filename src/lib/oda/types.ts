@@ -133,6 +133,18 @@ export type RecurringList = {
   schedule: RecurringSchedule | null;
 };
 
+export type CartQuantityChange = {
+  /** Cart contents after the change, top-of-list first. */
+  cart: CartItem[];
+  /** Total distinct products in the cart after the change. */
+  productCount: number;
+  productId: number;
+  /** Resolved product name when known (from cart contents pre or post change). */
+  name: string | null;
+  previousQuantity: number;
+  quantity: number;
+};
+
 export type RecurringQuantityChange = {
   list: RecurringList;
   productId: number;
