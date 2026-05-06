@@ -1,14 +1,32 @@
 # oda-butler
 
-Slack bot for Sanity's Oslo office shared [Oda](https://oda.com/) grocery account. Powered by Claude Sonnet 4.6 and [Mastra](https://mastra.ai/).
+Slack bot for Sanity's Oslo office shared [Oda](https://oda.com/) grocery account. Built on [Mastra](https://mastra.ai/) and Claude Sonnet 4.6.
 
 ## What it does
 
-- Search products in Norwegian or English
-- Read, add to, and remove from the shared cart
-- View past orders and the next delivery
-- Manage the recurring order (faste varer)
-- Reads images you share so you can post a fridge photo and get help
+The office runs a weekly recurring order on a shared Oda B2B account. The bot lets anyone in the office:
+
+- Search and recommend products from Oda's catalog (Norwegian and English queries both work)
+- Look up details on a specific product (price, nutrition, ingredients, allergens, origin, supplier, storage)
+- See what's on the recurring order, when the next delivery lands, and the schedule
+- Add, change, or remove items on the recurring order
+- React to messages with a quick emoji instead of a full reply when that fits
+
+The bot has vision: drag a fridge photo into the thread and it'll cross-reference what it sees against the recurring order.
+
+Out of scope: one-off orders, browsing past orders, payment or delivery details, changing the recurring schedule itself. Those need the office manager.
+
+## Toolset
+
+Five domain tools plus two reaction tools (auto-injected by Mastra, hidden from the Slack UI):
+
+```
+search_products
+get_product
+get_recurring_order
+update_recurring_item
+remove_recurring_item
+```
 
 ## Setup
 
@@ -28,34 +46,87 @@ bun install
 bun run dev
 ```
 
-The bot signs in to Oda automatically using `ODA_EMAIL` and `ODA_PASSWORD` and re-authenticates when the session expires. Cookies are persisted under `~/.sanity-oda` so subsequent starts don't need to log in again.
+The bot signs in to Oda automatically using `ODA_EMAIL`/`ODA_PASSWORD` and re-authenticates when the session expires. Cookies persist at `<project>/data/oda-cookies.json` so subsequent starts don't need to log in again.
 
 ### Optional CLI
-
-A few diagnostic helpers for when you want to poke at the auth state directly:
 
 ```sh
 bun run oda:whoami   # check the current Oda user
 bun run oda:login    # force a fresh login (useful for testing creds)
-bun run oda:logout   # clear stored cookies (next request re-authenticates)
+bun run oda:logout   # clear stored cookies
 ```
 
-If you'd rather not put credentials in `.env`, omit `ODA_EMAIL`/`ODA_PASSWORD` and run `bun run oda:login` once manually. The bot will keep working until the session expires, after which you'll see an `OdaSessionExpiredError` and need to re-run the login command.
+If you'd rather not put credentials in `.env`, omit `ODA_EMAIL`/`ODA_PASSWORD` and run `bun run oda:login` once manually. The bot will keep working until the session expires; then you'll see an `OdaSessionExpiredError` and need to re-run the login command.
 
 ## How it's wired
 
-- **Mastra** drives the agent: tools, memory, model routing.
+- **Mastra** drives the agent: tools, memory, model routing, channel adapters.
 - **`@chat-adapter/slack`** handles Slack events in Socket Mode (no public URL needed).
-- **`OdaClient`** (in `src/lib/oda/`) is a hand-rolled client over Oda's reverse-engineered REST + `__NEXT_DATA__` endpoints. Notes in `docs/oda-api.md`.
+- **`OdaClient`** (`src/lib/oda/`) is a hand-rolled client over Oda's reverse-engineered REST + `__NEXT_DATA__` endpoints. The wire shapes live in `docs/oda-openapi.yaml`; conceptual notes (consumer-vs-B2B recurring distinction, where data is _not_ served from) live in `docs/oda-api.md`.
 - **LibSQL** (SQLite) stores conversation memory at `data/oda.db`.
 
-The bot only responds to explicit `@`-mentions, and only in `#oslo-office-internal` and `#test-content-agent`.
+The bot only responds to explicit `@`-mentions, scoped to the channels listed in `ALLOWED_CHANNELS`.
 
 ## Scripts
 
 ```sh
-bun run dev          # start with hot reload
-bun run start        # start without hot reload
-bun run test         # run vitest
-bun run manifest     # print the Slack app manifest
+bun run dev            # start with hot reload
+bun run start          # start without hot reload
+bun run test           # run vitest
+bun run check          # biome lint + format check
+bun run format         # auto-fix formatting
+bun run gen:api-types  # regenerate src/lib/oda/api-types.generated.ts from the OpenAPI spec
+bun run manifest       # print the Slack app manifest
+bun run deploy         # rsync to autofoos-mac and reload the LaunchAgent
+```
+
+## Editor setup
+
+Format-on-save is wired up for both Zed and VSCode via `.zed/settings.json` and `.vscode/settings.json`. VSCode users get a one-time prompt to install the Biome extension.
+
+## Deployment
+
+The bot runs as a macOS LaunchAgent on a Mac mini in the office. `bun run deploy` rsyncs the source over SSH, installs deps, writes the plist, and reloads the service.
+
+The remote `.env` is bootstrapped once by hand and never touched by deploys:
+
+```sh
+scp .env autofoos@autofoos-mac.local:~/src/oda-butler/.env
+ssh autofoos@autofoos-mac.local 'chmod 600 ~/src/oda-butler/.env'
+```
+
+After that, deploys verify the remote `.env` exists and refuse to run if it doesn't.
+
+## Project structure
+
+```
+src/
+  index.ts                 # entry point + graceful shutdown
+  manifest.ts              # Slack app manifest definition
+  lib/
+    env.ts                 # requireEnv
+    logger.ts              # shared Mastra ConsoleLogger
+    slack.ts               # stripMentions, slackTsToDate, decodeSlackThreadId
+    oda/
+      client.ts            # OdaClient
+      api-types.yaml       # generated wire types
+      parsers.ts           # wire → domain (Anti-Corruption Layer)
+      types.ts             # domain types
+      ...                  # cookie jar, http transport, etc.
+  mastra/
+    agent.ts               # mention handler + agent definition
+    instructions.ts        # system prompt
+    constants.ts           # ALLOWED_CHANNELS, HISTORY_LIMIT, LOADING_MESSAGE_POOL
+    types.ts               # Turn (Mastra DB shape)
+    conversation.ts        # Slack thread → Mastra conversation
+    streaming.ts           # tool-call → Slack task_update card translation
+    memory.ts              # libsql conversation memory
+    tools/                 # the agent's tools
+docs/
+  oda-openapi.yaml         # canonical wire-shape spec
+  oda-api.md               # conceptual notes
+scripts/
+  deploy.ts                # macOS LaunchAgent deployment
+  generate-manifest.ts     # prints the Slack app manifest
+  oda-auth.ts              # CLI for cookie management
 ```
