@@ -29,13 +29,28 @@ export function asStreamingPlan(stream: AgentStream): StreamingPlan {
 async function* toChatChunks(
   stream: AgentStream,
 ): AsyncIterable<string | StreamChunk> {
+  // The agent often emits text in segments interleaved with tool calls
+  // ("On it!" → tool → "Done!"). Slack's stream API concatenates raw text
+  // chunks without preserving paragraph breaks, so without an explicit
+  // separator the segments collide ("On it!Done!"). We track when we've
+  // crossed a non-text chunk and prepend a blank line before the next
+  // text segment so paragraphs survive.
+  let needsSeparator = false;
+  let hasEmittedText = false;
+
   for await (const chunk of stream) {
     if (chunk.type === "text-delta" && chunk.payload.text) {
+      if (needsSeparator && hasEmittedText) {
+        yield "\n\n";
+      }
+      needsSeparator = false;
+      hasEmittedText = true;
       yield chunk.payload.text;
       continue;
     }
 
     if (chunk.type === "tool-call") {
+      needsSeparator = true;
       yield {
         type: "task_update",
         id: chunk.payload.toolCallId,
@@ -46,6 +61,7 @@ async function* toChatChunks(
     }
 
     if (chunk.type === "tool-result") {
+      needsSeparator = true;
       yield {
         type: "task_update",
         id: chunk.payload.toolCallId,
