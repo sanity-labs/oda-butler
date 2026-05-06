@@ -61,7 +61,10 @@ async function* toChatChunks(
 
   // Build up an id → name map as products flow through tool results so
   // later tool-call cards can render "Looking up Tine Lettmelk" instead of
-  // a stack of identical "Looking up product details" rows.
+  // a stack of identical "Looking up product details" rows. Scoped to this
+  // generator invocation — one map per agent turn, GC'd when the stream
+  // finishes. Don't hoist to module scope: that would accumulate every
+  // product anyone ever mentions for the lifetime of the process.
   const productNames = new Map<number, string>();
 
   for await (const chunk of stream) {
