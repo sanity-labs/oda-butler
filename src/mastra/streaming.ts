@@ -3,19 +3,40 @@ import { type StreamChunk, StreamingPlan } from "chat";
 
 type AgentStream = AsyncIterable<ChunkType>;
 
-const TOOL_LABELS: Record<string, (args: Record<string, unknown>) => string> = {
+type LabelFn = (
+  args: Record<string, unknown>,
+  names: ReadonlyMap<number, string>,
+) => string;
+
+const TOOL_LABELS: Record<string, LabelFn> = {
   search_products: (a) => `Searching for “${stringArg(a, "query")}”`,
-  get_product: () => "Looking up product details",
-  get_recurring_order: () => "Checking the recurring order",
-  update_recurring_item: (a) => {
-    const qty = a.quantity;
-    if (typeof qty !== "number") return "Updating the recurring order";
-    return qty === 1
-      ? "Adding to the recurring order"
-      : `Setting quantity to ${qty}`;
+  get_product: (a, names) => {
+    const name = productName(a, names);
+    return name ? `Looking up ${name}` : "Looking up product details";
   },
-  remove_recurring_item: () => "Removing from the recurring order",
+  get_recurring_order: () => "Checking the recurring order",
+  update_recurring_item: (a, names) => {
+    const name = productName(a, names);
+    const target = name ? ` ${name}` : "";
+    const qty = a.quantity;
+    if (typeof qty !== "number")
+      return `Updating${target || " the recurring order"}`;
+    if (qty === 1) return `Adding${target || " to the recurring order"}`;
+    return name ? `Setting ${name} to ${qty}` : `Setting quantity to ${qty}`;
+  },
+  remove_recurring_item: (a, names) => {
+    const name = productName(a, names);
+    return name ? `Removing ${name}` : "Removing from the recurring order";
+  },
 };
+
+function productName(
+  args: Record<string, unknown>,
+  names: ReadonlyMap<number, string>,
+): string | null {
+  const id = args.productId;
+  return typeof id === "number" ? (names.get(id) ?? null) : null;
+}
 
 /**
  * Wrap an agent's `fullStream` so chat-sdk renders tool calls as inline
@@ -38,6 +59,11 @@ async function* toChatChunks(
   let needsSeparator = false;
   let hasEmittedText = false;
 
+  // Build up an id → name map as products flow through tool results so
+  // later tool-call cards can render "Looking up Tine Lettmelk" instead of
+  // a stack of identical "Looking up product details" rows.
+  const productNames = new Map<number, string>();
+
   for await (const chunk of stream) {
     if (chunk.type === "text-delta" && chunk.payload.text) {
       if (needsSeparator && hasEmittedText) {
@@ -54,7 +80,11 @@ async function* toChatChunks(
       yield {
         type: "task_update",
         id: chunk.payload.toolCallId,
-        title: humanize(chunk.payload.toolName, asArgs(chunk.payload.args)),
+        title: humanize(
+          chunk.payload.toolName,
+          asArgs(chunk.payload.args),
+          productNames,
+        ),
         status: "in_progress",
       };
       continue;
@@ -62,13 +92,57 @@ async function* toChatChunks(
 
     if (chunk.type === "tool-result") {
       needsSeparator = true;
+      harvestProductNames(chunk.payload.result, productNames);
       yield {
         type: "task_update",
         id: chunk.payload.toolCallId,
-        title: humanize(chunk.payload.toolName, asArgs(chunk.payload.args)),
+        title: humanize(
+          chunk.payload.toolName,
+          asArgs(chunk.payload.args),
+          productNames,
+        ),
         status: chunk.payload.isError ? "error" : "complete",
       };
     }
+  }
+}
+
+/**
+ * Walk a tool result and remember any `{ id, name }` pairs we find. Covers
+ * search_products (`{ items: Product[] }`), get_product (a single product),
+ * get_recurring_order (a list with `items: CartItem[]`), and the change
+ * summaries returned by update/remove_recurring_item.
+ */
+function harvestProductNames(
+  result: unknown,
+  names: Map<number, string>,
+): void {
+  if (!result || typeof result !== "object") return;
+  const r = result as Record<string, unknown>;
+
+  rememberPair(r.id, r.name, names);
+  rememberPair(r.productId, r.name, names);
+
+  for (const key of ["items"]) {
+    const list = r[key];
+    if (Array.isArray(list)) {
+      for (const entry of list) {
+        if (entry && typeof entry === "object") {
+          const e = entry as Record<string, unknown>;
+          rememberPair(e.id, e.name, names);
+        }
+      }
+    }
+  }
+}
+
+function rememberPair(
+  id: unknown,
+  name: unknown,
+  names: Map<number, string>,
+): void {
+  if (typeof id === "number" && typeof name === "string" && name) {
+    names.set(id, name);
   }
 }
 
@@ -78,8 +152,12 @@ function asArgs(value: unknown): Record<string, unknown> {
     : {};
 }
 
-function humanize(toolName: string, args: Record<string, unknown>): string {
-  return TOOL_LABELS[toolName]?.(args) ?? toolName;
+function humanize(
+  toolName: string,
+  args: Record<string, unknown>,
+  names: ReadonlyMap<number, string>,
+): string {
+  return TOOL_LABELS[toolName]?.(args, names) ?? toolName;
 }
 
 function stringArg(args: Record<string, unknown>, key: string): string {
