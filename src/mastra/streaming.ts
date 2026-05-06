@@ -4,16 +4,17 @@ import { type StreamChunk, StreamingPlan } from "chat";
 type AgentStream = AsyncIterable<ChunkType>;
 
 const TOOL_LABELS: Record<string, (args: Record<string, unknown>) => string> = {
-  search_products: (a) => `Searching for "${stringArg(a, "query")}"`,
-  get_product: () => "Reading product info",
-  get_recurring_order: () => "Reading recurring order",
+  search_products: (a) => `Searching for “${stringArg(a, "query")}”`,
+  get_product: () => "Looking up product details",
+  get_recurring_order: () => "Checking the recurring order",
   update_recurring_item: (a) => {
     const qty = a.quantity;
-    return typeof qty === "number"
-      ? `Updating recurring (qty ${qty})`
-      : "Updating recurring";
+    if (typeof qty !== "number") return "Updating the recurring order";
+    return qty === 1
+      ? "Adding to the recurring order"
+      : `Setting quantity to ${qty}`;
   },
-  remove_recurring_item: () => "Removing from recurring",
+  remove_recurring_item: () => "Removing from the recurring order",
 };
 
 /**
