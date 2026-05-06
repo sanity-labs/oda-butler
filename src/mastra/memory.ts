@@ -41,8 +41,9 @@ export const memory = new Memory({
       model: "anthropic/claude-haiku-4-5",
       // If a thread sits idle longer than the prompt-cache TTL, activate
       // any buffered observations before the next mention so the cold
-      // request goes out compressed instead of as raw history.
-      activateAfterIdle: "5m",
+      // request goes out compressed instead of as raw history. Aligned
+      // with the 1h cache TTL on the static system prefix.
+      activateAfterIdle: "1h",
     },
   },
 });

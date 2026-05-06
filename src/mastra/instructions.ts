@@ -315,6 +315,11 @@ type SystemMessage = {
  * input tokens; for a ~10k-token static prefix that's ~$0.027 saved
  * per hit on Sonnet 4.6.
  *
+ * 1h TTL: writes cost 2× base ($6/MTok vs $3.75 at 5m), but for a
+ * bursty office Slack channel where mid-length idle gaps (30–60 min)
+ * are common, the longer TTL pays itself back on the first follow-up
+ * after a meeting or lunch. Hits remain $0.30/MTok regardless of TTL.
+ *
  * Mastra re-evaluates this builder on every stream/generate via the
  * function form of `instructions`, so the timestamp stays fresh
  * without touching the cached block.
@@ -326,7 +331,7 @@ export function buildOdaSystemPrompt(now: Date = new Date()): SystemMessage[] {
       content: ODA_SYSTEM_PROMPT,
       providerOptions: {
         anthropic: {
-          cacheControl: { type: "ephemeral" },
+          cacheControl: { type: "ephemeral", ttl: "1h" },
         },
       },
     },
