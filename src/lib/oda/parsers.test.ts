@@ -182,9 +182,10 @@ test("parseRecurringListsResponse picks the active recurring list and parses sch
   expect(list?.productCount).toBe(69);
   expect(list?.schedule).toMatchObject({
     nextDate: "2026-05-11",
+    nextDateLabel: "mandag 11. mai",
     frequencyWeeks: 1,
     weekday: 1,
-    label: "every Monday, next on 2026-05-11",
+    label: "hver mandag, neste mandag 11. mai",
   });
 });
 
@@ -216,16 +217,15 @@ test("parseRecurringListDetail merges items with provided schedule", () => {
     },
     {
       nextDate: "2026-05-11",
+      nextDateLabel: "mandag 11. mai",
       frequencyWeeks: 2,
       weekday: 3,
-      label: "every other Wednesday, next on 2026-05-11",
+      label: "annenhver onsdag, neste mandag 11. mai",
     },
   );
   expect(detail.items).toHaveLength(1);
   expect(detail.items[0]).toMatchObject({ id: 41014, quantity: 2 });
-  expect(detail.schedule?.label).toBe(
-    "every other Wednesday, next on 2026-05-11",
-  );
+  expect(detail.schedule?.label).toBe("annenhver onsdag, neste mandag 11. mai");
 });
 
 test("parseOrdersResponse flattens months and marks delivered orders not upcoming", () => {

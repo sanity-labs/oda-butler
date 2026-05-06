@@ -112,11 +112,13 @@ export type RecurringOrder = {
 export type RecurringSchedule = {
   /** ISO date (YYYY-MM-DD) of the next scheduled delivery. */
   nextDate: string | null;
+  /** Norwegian-formatted next delivery date, e.g. "mandag 11. mai". */
+  nextDateLabel: string | null;
   /** Weeks between deliveries. 1 = weekly, 2 = every other week. */
   frequencyWeeks: number | null;
   /** ISO weekday: 1=Mon, 2=Tue, ..., 7=Sun. */
   weekday: number | null;
-  /** Human-readable label, e.g. "every Monday, next on May 11". */
+  /** Human-readable label, e.g. "hver mandag, neste mandag 11. mai". */
   label: string;
 };
 

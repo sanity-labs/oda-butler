@@ -244,14 +244,20 @@ export function parseRecurringSchedule(
 ): RecurringSchedule | null {
   if (!raw) return null;
   const nextDate = raw.next_date ?? null;
+  const nextDateLabel = formatNorwegianDate(nextDate);
   const params = parseEditUrlParams(raw.edit_url ?? "");
   const frequencyWeeks = params.frequency;
   const weekday = params.weekday;
   return {
     nextDate,
+    nextDateLabel,
     frequencyWeeks,
     weekday,
-    label: formatScheduleLabel({ nextDate, frequencyWeeks, weekday }),
+    label: formatScheduleLabel({
+      nextDateLabel,
+      frequencyWeeks,
+      weekday,
+    }),
   };
 }
 
@@ -273,41 +279,57 @@ function parseEditUrlParams(editUrl: string): {
   };
 }
 
-const WEEKDAY_NAMES = [
+/** Norwegian (bokmål) weekday names indexed by ISO weekday (1=Monday). */
+const WEEKDAY_NAMES_NB = [
   "",
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-  "Sunday",
+  "mandag",
+  "tirsdag",
+  "onsdag",
+  "torsdag",
+  "fredag",
+  "lørdag",
+  "søndag",
 ];
 
+const NORWEGIAN_DATE_FORMAT = new Intl.DateTimeFormat("nb-NO", {
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+  timeZone: "Europe/Oslo",
+});
+
+/** "2026-05-11" → "mandag 11. mai". Returns null on bad input. */
+function formatNorwegianDate(isoDate: string | null): string | null {
+  if (!isoDate) return null;
+  const parsed = new Date(`${isoDate}T12:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return NORWEGIAN_DATE_FORMAT.format(parsed);
+}
+
 function formatScheduleLabel({
-  nextDate,
+  nextDateLabel,
   frequencyWeeks,
   weekday,
 }: {
-  nextDate: string | null;
+  nextDateLabel: string | null;
   frequencyWeeks: number | null;
   weekday: number | null;
 }): string {
   const day = weekdayName(weekday);
-  const next = nextDate ? `next on ${nextDate}` : "";
+  const next = nextDateLabel ? `neste ${nextDateLabel}` : "";
   return compact([formatCadence(frequencyWeeks, day), next]).join(", ");
 }
 
 function weekdayName(weekday: number | null): string | null {
   if (!weekday || weekday < 1 || weekday > 7) return null;
-  return WEEKDAY_NAMES[weekday] ?? null;
+  return WEEKDAY_NAMES_NB[weekday] ?? null;
 }
 
 function formatCadence(weeks: number | null, day: string | null): string {
-  if (weeks === 1) return day ? `every ${day}` : "weekly";
-  if (weeks === 2) return day ? `every other ${day}` : "every other week";
-  if (weeks && weeks > 2) return `every ${weeks} weeks`;
-  return day ? `on ${day}s` : "";
+  if (weeks === 1) return day ? `hver ${day}` : "ukentlig";
+  if (weeks === 2) return day ? `annenhver ${day}` : "annenhver uke";
+  if (weeks && weeks > 2) return `hver ${weeks}. uke`;
+  return day ? `på ${day}er` : "";
 }
 
 /**

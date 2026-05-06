@@ -9,7 +9,8 @@ export const getRecurringOrder = createTool({
     Read the office's recurring order (faste varer): items with
     quantities, the delivery schedule (frequency, weekday, next delivery
     date), and the human-readable schedule label like
-    "every Monday, next on 2026-05-11".
+    "hver mandag, neste mandag 11. mai". The next delivery date is also
+    pre-formatted in Norwegian as \`schedule.nextDateLabel\`.
 
     Call this before update_recurring_item or remove_recurring_item so
     you know what's already on the list.
