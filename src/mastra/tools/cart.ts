@@ -8,14 +8,13 @@ import type { RecurringSchedule } from "../../lib/oda/types.ts";
  * "Next-delivery extras" is the regular Oda cart, but framed for the
  * agent in terms of how it actually behaves on a B2B account: it's a
  * scratchpad for one-off additions that ride along with the next
- * scheduled recurring delivery. Two days before delivery, Oda merges
- * the recurring list + whatever is in the cart into the actual order;
- * the cart resets after.
+ * unlocked scheduled delivery. Around 12:00 the day before delivery,
+ * Oda merges the recurring list + whatever is in the cart into the
+ * actual order; the cart resets after.
  *
- * These tools are intentionally separate from the recurring tools so
- * the agent can pick the right one based on intent ("just this week"
- * vs. "every week from now on") without us having to encode that
- * distinction inside a single overloaded tool.
+ * `getNextDeliveryExtras` is no longer registered on the agent (the
+ * unified `get_next_delivery` tool subsumes it), but the definition is
+ * kept for potential future use.
  */
 
 export const getNextDeliveryExtras = createTool({
@@ -23,15 +22,7 @@ export const getNextDeliveryExtras = createTool({
   description: outdent`
     List items currently staged as one-off additions to the next
     scheduled delivery. These ride along with the recurring order on
-    the next drop and reset after; they don't recur.
-
-    Use this for questions like "what's getting added this week?",
-    "did anyone throw extras on the next order?", or before adding more
-    one-offs so you can spot duplicates and bump quantities instead of
-    creating a second line.
-
-    For the recurring list itself (what we always order), use
-    get_recurring_order.
+    the next unlocked drop and reset after; they don't recur.
 
     Returns:
     - items: the staged products with line prices and quantities.
@@ -68,12 +59,12 @@ export const addToNextDelivery = createTool({
     next delivery", "throw two bags of chips on the next order",
     "another bottle of olive oil this week".
 
-    For permanent additions to every recurring delivery, use
-    update_recurring_item instead.
+    For permanent additions to every recurring delivery, refer the
+    user to the office manager; recurring is read-only.
 
-    Before calling, run get_next_delivery_extras (and optionally
-    get_recurring_order) so you know what's already staged. If the
-    product is already on the recurring list, mention that to the user
+    Before calling, run get_next_delivery so you know what's already
+    staged in the cart and what the recurring template already covers.
+    If the product is already on recurring, mention that to the user
     rather than silently double-stocking.
 
     Returns previousQuantity, quantity, and the next delivery date so
@@ -85,7 +76,7 @@ export const addToNextDelivery = createTool({
       .number()
       .int()
       .describe(
-        "Product ID from search_products, get_product, or get_recurring_order.",
+        "Product ID from search_products, get_product, or get_next_delivery.",
       ),
     quantity: z
       .number()
@@ -112,9 +103,9 @@ export const removeFromNextDelivery = createTool({
     added for this week — e.g. "actually skip the Snickers", "drop
     the extra olive oil from this week's order".
 
-    This only touches the per-delivery extras. To remove a product
-    from the *recurring* list (so it stops coming every week), use
-    remove_recurring_item instead.
+    This only touches the per-delivery cart. To stop a product from
+    coming on every recurring delivery, refer the user to the office
+    manager; recurring is read-only.
 
     Returns previousQuantity so you can confirm what was dropped.
   `,
@@ -122,7 +113,7 @@ export const removeFromNextDelivery = createTool({
     productId: z
       .number()
       .int()
-      .describe("Product ID from get_next_delivery_extras or search_products."),
+      .describe("Product ID from get_next_delivery or search_products."),
   }),
   execute: async (inputData) => {
     const [change, list] = await Promise.all([

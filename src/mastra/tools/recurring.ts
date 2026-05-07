@@ -3,6 +3,15 @@ import { outdent } from "outdent";
 import { z } from "zod";
 import { oda } from "../../lib/oda/instance.ts";
 
+/**
+ * `getRecurringOrder`, `updateRecurringItem`, and `removeRecurringItem`
+ * are no longer registered on the agent. The unified `get_next_delivery`
+ * tool subsumes the read path, and the office manager owns recurring
+ * mutations. Definitions are kept here so a future office that wants
+ * recurring edits or a standalone read can re-register them without
+ * re-implementing.
+ */
+
 export const getRecurringOrder = createTool({
   id: "get_recurring_order",
   description: outdent`
@@ -31,12 +40,6 @@ export const getRecurringOrder = createTool({
   execute: () => oda.getRecurringList(),
 });
 
-/**
- * Not currently registered on the agent — the office manager owns the
- * recurring list, so the bot is scoped to cart-only mutations. Kept
- * here (along with removeRecurringItem) so a future office that wants
- * recurring edits can re-register them without re-implementing.
- */
 export const updateRecurringItem = createTool({
   id: "update_recurring_item",
   description: outdent`

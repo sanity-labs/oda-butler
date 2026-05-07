@@ -19,16 +19,17 @@ Out of scope: editing the recurring order, browsing past orders, payment or deli
 
 ## Toolset
 
-Six domain tools plus two reaction tools (auto-injected by Mastra, hidden from the Slack UI):
+Five domain tools plus two reaction tools (auto-injected by Mastra, hidden from the Slack UI):
 
 ```
 search_products
 get_product
-get_recurring_order
-get_next_delivery_extras
+get_next_delivery
 add_to_next_delivery
 remove_from_next_delivery
 ```
+
+`get_next_delivery` is the consolidated read for everything about what's arriving and when. It returns three sections in one call: the in-flight order (from Oda's order tracking), the cart for the next unlocked delivery, and the standing recurring template. Anthropic's [tool design guide](https://www.anthropic.com/engineering/writing-tools-for-agents) explicitly favors this shape over splitting related reads into separate tools.
 
 ## Setup
 

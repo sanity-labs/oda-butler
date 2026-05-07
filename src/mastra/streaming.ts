@@ -16,6 +16,7 @@ const TOOL_LABELS: Record<string, LabelFn> = {
     return name ? `Looking up ${name}` : "Looking up product details";
   },
   get_recurring_order: () => "Checking the recurring order",
+  get_next_delivery: () => "Checking the next delivery",
   update_recurring_item: (a, names) => {
     const name = productName(a, names);
     const target = name ? ` ${name}` : "";

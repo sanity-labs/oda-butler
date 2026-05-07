@@ -12,13 +12,9 @@ import { buildOdaSystemPrompt } from "./instructions.ts";
 import { memory } from "./memory.ts";
 import { ensureUserLast } from "./processors.ts";
 import { asStreamingPlan } from "./streaming.ts";
-import {
-  addToNextDelivery,
-  getNextDeliveryExtras,
-  removeFromNextDelivery,
-} from "./tools/cart.ts";
+import { addToNextDelivery, removeFromNextDelivery } from "./tools/cart.ts";
+import { getNextDelivery } from "./tools/delivery.ts";
 import { getProduct, searchProducts } from "./tools/products.ts";
-import { getRecurringOrder } from "./tools/recurring.ts";
 
 const ALLOWED_CHANNELS = new Set(config.slack.allowedChannels);
 
@@ -171,8 +167,7 @@ export const odaAgent = new Agent({
   tools: {
     search_products: searchProducts,
     get_product: getProduct,
-    get_recurring_order: getRecurringOrder,
-    get_next_delivery_extras: getNextDeliveryExtras,
+    get_next_delivery: getNextDelivery,
     add_to_next_delivery: addToNextDelivery,
     remove_from_next_delivery: removeFromNextDelivery,
   },
