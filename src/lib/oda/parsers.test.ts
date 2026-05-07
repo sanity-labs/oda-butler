@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import {
   parseCartResponse,
+  parseCartTotals,
   parseOrderDetail,
   parseOrdersResponse,
   parseRecurringListDetail,
@@ -197,13 +198,13 @@ test("parseRecurringListsResponse returns null when nothing is active", () => {
   ).toBeNull();
 });
 
-test("parseRecurringListDetail merges items with provided schedule", () => {
+test("parseRecurringListDetail merges items, schedule, and an estimated per-delivery total", () => {
   const detail = parseRecurringListDetail(
     {
       id: 572919,
       title: "Ukentlig oppdatert",
-      number_of_products: 1,
-      total_quantity: 2,
+      number_of_products: 2,
+      total_quantity: 4,
       items: [
         {
           quantity: 2,
@@ -211,6 +212,14 @@ test("parseRecurringListDetail merges items with provided schedule", () => {
             id: 41014,
             full_name: "Pepsi Max brett 20 x 0,33L",
             gross_price: "234.00",
+          },
+        },
+        {
+          quantity: 2,
+          product: {
+            id: 8143,
+            full_name: "Tine Lettmelk 1% fett",
+            gross_price: "31.90",
           },
         },
       ],
@@ -223,9 +232,66 @@ test("parseRecurringListDetail merges items with provided schedule", () => {
       label: "annenhver onsdag, neste mandag 11. mai",
     },
   );
-  expect(detail.items).toHaveLength(1);
-  expect(detail.items[0]).toMatchObject({ id: 41014, quantity: 2 });
+  expect(detail.items).toHaveLength(2);
   expect(detail.schedule?.label).toBe("annenhver onsdag, neste mandag 11. mai");
+  // 2 × 234.00 + 2 × 31.90 = 531.80
+  expect(detail.estimatedTotal).toBeCloseTo(531.8, 2);
+  expect(detail.currency).toBe("NOK");
+});
+
+test("parseRecurringListDetail returns null totals when items have no prices", () => {
+  // qty=0 dormant items shouldn't contribute, and an empty list shouldn't
+  // pretend a price exists. The agent uses null to know it can't quote
+  // a total.
+  const detail = parseRecurringListDetail(
+    {
+      id: 1,
+      title: "Empty",
+      number_of_products: 0,
+      total_quantity: 0,
+      items: [],
+    },
+    null,
+  );
+  expect(detail.estimatedTotal).toBeNull();
+  expect(detail.currency).toBeNull();
+});
+
+test("parseCartTotals sums line items and surfaces wire-provided gross total", () => {
+  const totals = parseCartTotals({
+    product_quantity_count: 3,
+    total_gross_amount: "1114.20",
+    currency: "NOK",
+    groups: [
+      {
+        items: [
+          {
+            quantity: 12,
+            product: {
+              id: 8476,
+              full_name: "R Hakkede tomater",
+              gross_price: "17.40",
+            },
+          },
+          {
+            quantity: 1,
+            product: {
+              id: 556,
+              full_name: "Idun Tomatketchup",
+              gross_price: "13.90",
+            },
+          },
+        ],
+      },
+    ],
+  });
+  expect(totals.productCount).toBe(3);
+  expect(totals.totalQuantity).toBe(13);
+  // 12 × 17.40 + 1 × 13.90 = 222.70
+  expect(totals.subtotal).toBeCloseTo(222.7, 2);
+  // total_gross_amount is what Oda actually charges, including small-order fees
+  expect(totals.totalGross).toBeCloseTo(1114.2, 2);
+  expect(totals.currency).toBe("NOK");
 });
 
 test("parseOrdersResponse flattens months and marks delivered orders not upcoming", () => {

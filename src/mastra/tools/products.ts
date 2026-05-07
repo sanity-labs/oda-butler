@@ -40,9 +40,16 @@ export const searchProducts = createTool({
     Search Oda's catalog for products. Norwegian and English queries
     both work.
 
-    Returns up to ~24 products per page with id, name, subtitle, price,
-    per-unit price, and url. Use the returned id with update_recurring_item,
-    remove_recurring_item, add_to_next_delivery, or get_product.
+    Returns up to ~24 products per page. Each product has:
+    - \`price\`: gross sale price for the package as sold (e.g. 31.90 for
+      a 1L milk carton, or 188.40 for a 6-pack of beer).
+    - \`relativePrice\` + \`relativePriceUnit\`: per-standardized-unit
+      price (e.g. 18.23 with unit "l" = kr 18,23 per liter; or 25.00
+      with unit "kg" = kr 25/kg). This is what comparison shoppers
+      mean by "unit price" or "price per liter".
+
+    Use the returned id with update_recurring_item, remove_recurring_item,
+    add_to_next_delivery, or get_product.
 
     Optional sort and limit:
     - \`sort\` reorders the returned page client-side. Use "price-asc"
