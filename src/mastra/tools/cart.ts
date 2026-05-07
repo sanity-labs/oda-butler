@@ -22,8 +22,8 @@ export const getNextDeliveryExtras = createTool({
   id: "get_next_delivery_extras",
   description: outdent`
     List items currently staged as one-off additions to the next
-    scheduled delivery. These ride along with the recurring order on the
-    next drop and reset after — they don't recur.
+    scheduled delivery. These ride along with the recurring order on
+    the next drop and reset after; they don't recur.
 
     Use this for questions like "what's getting added this week?",
     "did anyone throw extras on the next order?", or before adding more
@@ -33,19 +33,24 @@ export const getNextDeliveryExtras = createTool({
     For the recurring list itself (what we always order), use
     get_recurring_order.
 
-    Returns the items, total distinct product count, and the schedule
-    for the recurring order they'll piggyback on, so you can phrase a
-    confirmation like "extras lands på neste levering, mandag 11. mai".
+    Returns:
+    - items: the staged products with line prices and quantities.
+    - totals: \`productCount\`, \`totalQuantity\`, \`subtotal\` (line sum),
+      \`totalGross\` (Oda's calculated total including small-order
+      fees), and \`currency\`. Use \`totalGross\` when the user asks
+      "how much" — it's what they'll actually be charged.
+    - schedule: the recurring order's schedule, so you can phrase
+      something like "lands på neste levering, mandag 11. mai".
   `,
   inputSchema: z.object({}),
   execute: async () => {
-    const [items, list] = await Promise.all([
-      oda.getCart(),
+    const [{ items, totals }, list] = await Promise.all([
+      oda.getCartWithTotals(),
       oda.getRecurringList(),
     ]);
     return {
       items,
-      productCount: items.length,
+      totals,
       schedule: list?.schedule ?? null,
     };
   },
@@ -138,6 +143,6 @@ function summarizeChange(
     previousQuantity: change.previousQuantity,
     quantity: change.quantity,
     schedule,
-    nextDeliveryProductCount: change.productCount,
+    totals: change.totals,
   };
 }

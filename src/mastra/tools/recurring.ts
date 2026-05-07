@@ -7,10 +7,19 @@ export const getRecurringOrder = createTool({
   id: "get_recurring_order",
   description: outdent`
     Read the office's recurring order (faste varer): items with
-    quantities, the delivery schedule (frequency, weekday, next delivery
-    date), and the human-readable schedule label like
-    "hver mandag, neste mandag 11. mai". The next delivery date is also
-    pre-formatted in Norwegian as \`schedule.nextDateLabel\`.
+    quantities, the delivery schedule, and a per-delivery cost estimate.
+
+    Returns:
+    - items: products on the list with name, quantity, and line price.
+    - productCount, totalQuantity: distinct products vs. total units.
+    - estimatedTotal, currency: approximate cost per delivery, summed
+      from item prices and quantities. This is the agent-facing answer
+      for "how much do we spend per delivery". Treat it as approximate;
+      Oda's actual delivery total can shift from fees, discounts, or
+      out-of-stock substitutions. Null when items have no prices.
+    - schedule: pre-formatted strings for next delivery date
+      (\`nextDateLabel\`, e.g. "mandag 11. mai") and cadence (\`label\`,
+      e.g. "hver mandag, neste mandag 11. mai").
 
     Call this before update_recurring_item or remove_recurring_item so
     you know what's already on the list.

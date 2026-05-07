@@ -71,6 +71,19 @@ export type CartItem = {
   url: string;
 };
 
+export type CartTotals = {
+  /** Distinct product count, e.g. 31. */
+  productCount: number;
+  /** Sum of all item quantities (a 12-pack at qty 2 contributes 24). */
+  totalQuantity: number;
+  /** Total cost as Oda calculates it, including small-order fees. */
+  totalGross: number;
+  /** Pre-fee subtotal (sum of line totals). */
+  subtotal: number;
+  /** ISO 4217 currency code, e.g. "NOK". */
+  currency: string;
+};
+
 export type DeliveryStep =
   | "CONFIRMED"
   | "PACKING"
@@ -129,6 +142,15 @@ export type RecurringList = {
   url: string;
   productCount: number;
   totalQuantity: number;
+  /**
+   * Estimated cost per delivery, summed from item prices and quantities.
+   * Approximate: doesn't include fees, discounts, or out-of-stock
+   * substitutions Oda may apply at order-creation time. The actual
+   * delivery total can shift slightly. Null when no items have prices.
+   */
+  estimatedTotal: number | null;
+  /** Currency for `estimatedTotal`. Null when no items. */
+  currency: string | null;
   items: CartItem[];
   schedule: RecurringSchedule | null;
 };
@@ -136,8 +158,8 @@ export type RecurringList = {
 export type CartQuantityChange = {
   /** Cart contents after the change, top-of-list first. */
   cart: CartItem[];
-  /** Total distinct products in the cart after the change. */
-  productCount: number;
+  /** Cart-level totals (distinct products, total qty, gross, currency) after the change. */
+  totals: CartTotals;
   productId: number;
   /** Resolved product name when known (from cart contents pre or post change). */
   name: string | null;

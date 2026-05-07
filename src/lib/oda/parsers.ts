@@ -16,6 +16,7 @@ import type {
 import { findDehydratedQuery, readPath } from "./next-data.ts";
 import type {
   CartItem,
+  CartTotals,
   DeliveryStep,
   NutritionRow,
   Order,
@@ -187,6 +188,26 @@ export function parseCartResponse(data: WireCart): CartItem[] {
   return [...top, ...grouped].map(toCartItem);
 }
 
+/**
+ * Extract the cart-level totals (line subtotal, gross total, currency)
+ * for the regular cart and the next-delivery extras (which share the
+ * `Cart` wire shape on B2B). Subtotal is summed from line items because
+ * the wire's `display_price` excludes some fees we want included.
+ */
+export function parseCartTotals(data: WireCart): CartTotals {
+  const items = parseCartResponse(data);
+  const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
+  const totalGross = toFinite(data.total_gross_amount);
+  const totalQuantity = items.reduce((sum, i) => sum + i.quantity, 0);
+  return {
+    productCount: data.product_quantity_count ?? items.length,
+    totalQuantity,
+    totalGross: totalGross || subtotal,
+    subtotal,
+    currency: data.currency ?? "NOK",
+  };
+}
+
 export function parseRecurringResponse(data: WireCart): RecurringOrder {
   return {
     productCount: data.product_quantity_count ?? 0,
@@ -213,7 +234,8 @@ export function parseRecurringListDetail(
   data: WireProductList,
   schedule: RecurringSchedule | null,
 ): RecurringList {
-  const items = data.items ?? [];
+  const items = (data.items ?? []).map(toCartItem);
+  const totals = estimateRecurringTotal(items);
   return {
     id: data.id ?? 0,
     title: data.title ?? "",
@@ -221,7 +243,9 @@ export function parseRecurringListDetail(
     url: data.url ?? "",
     productCount: data.number_of_products ?? items.length,
     totalQuantity: data.total_quantity ?? 0,
-    items: items.map(toCartItem),
+    estimatedTotal: totals.estimatedTotal,
+    currency: totals.currency,
+    items,
     schedule,
   };
 }
@@ -234,9 +258,31 @@ function toRecurringList(raw: WireProductListSummary): RecurringList {
     url: raw.url ?? "",
     productCount: raw.number_of_products ?? 0,
     totalQuantity: raw.total_quantity ?? 0,
+    // The list summary endpoint doesn't include items, so we can't
+    // estimate the total from here. The detail call (used by
+    // `getRecurringList`) backfills these via parseRecurringListDetail.
+    estimatedTotal: null,
+    currency: null,
     items: [],
     schedule: parseRecurringSchedule(raw.recurring_order ?? null),
   };
+}
+
+/**
+ * Sum line totals (price × quantity) across the recurring list to
+ * produce a per-delivery cost estimate. The product-list endpoint
+ * doesn't return a server-computed total, so this is the best we can
+ * do; the actual delivery total may shift from fees, discounts, or
+ * substitutions.
+ */
+function estimateRecurringTotal(items: CartItem[]): {
+  estimatedTotal: number | null;
+  currency: string | null;
+} {
+  const priced = items.filter((i) => i.price > 0 && i.quantity > 0);
+  if (priced.length === 0) return { estimatedTotal: null, currency: null };
+  const sum = priced.reduce((s, i) => s + i.price * i.quantity, 0);
+  return { estimatedTotal: sum, currency: "NOK" };
 }
 
 export function parseRecurringSchedule(

@@ -13,6 +13,7 @@ import { ensureOk, extractListError } from "./errors.ts";
 import { ODA_API_BASE, ODA_BASE_URL, OdaTransport } from "./http.ts";
 import {
   parseCartResponse,
+  parseCartTotals,
   parseHtmlSearchPage,
   parseOrderDetail,
   parseOrdersResponse,
@@ -27,6 +28,7 @@ import {
 import type {
   CartItem,
   CartQuantityChange,
+  CartTotals,
   Order,
   OrderDetails,
   ProductDetails,
@@ -118,15 +120,39 @@ export class OdaClient {
     return snapshot.items;
   }
 
+  /**
+   * Read the cart with line items + cart-level totals (gross, subtotal,
+   * currency). Used by the next-delivery-extras tool so the agent can
+   * report "7 items, kr 234,50 added to next delivery" without doing
+   * its own arithmetic.
+   */
+  async getCartWithTotals(): Promise<{
+    items: CartItem[];
+    totals: CartTotals;
+  }> {
+    return this.#getCartSnapshot();
+  }
+
   async #getCartSnapshot(): Promise<{
     items: CartItem[];
-    productCount: number;
+    totals: CartTotals;
   }> {
     const data = await this.#getJson<WireCart>(CART_API);
-    if (!data) return { items: [], productCount: 0 };
+    if (!data) {
+      return {
+        items: [],
+        totals: {
+          productCount: 0,
+          totalQuantity: 0,
+          totalGross: 0,
+          subtotal: 0,
+          currency: "NOK",
+        },
+      };
+    }
     return {
       items: parseCartResponse(data),
-      productCount: data.product_quantity_count ?? 0,
+      totals: parseCartTotals(data),
     };
   }
 
@@ -171,7 +197,7 @@ export class OdaClient {
     if (delta === 0) {
       return {
         cart: before.items,
-        productCount: before.productCount,
+        totals: before.totals,
         productId,
         name: beforeItem?.name ?? null,
         previousQuantity,
@@ -187,7 +213,7 @@ export class OdaClient {
     const afterItem = after.items.find((i) => i.id === productId);
     return {
       cart: after.items,
-      productCount: after.productCount,
+      totals: after.totals,
       productId,
       name: afterItem?.name ?? beforeItem?.name ?? null,
       previousQuantity,
