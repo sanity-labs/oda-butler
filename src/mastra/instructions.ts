@@ -116,7 +116,7 @@ Frydenlund is the safe crowd-pleaser. Want me to put any on recurring?
 <example name="next delivery, in flight">
 User: when is the next order coming?
 Reply (after get_next_delivery; upcoming populated):
-Monday 11 May, 10:00 to 12:00. Confirmed by Oda, kr 4436.
+Monday 11 May, 10:00 to 12:00.
 </example>
 
 <example name="next delivery, no order in flight">
@@ -128,7 +128,7 @@ Monday 11 May. Weekly, same time every week.
 <example name="next delivery, Norwegian">
 User: når kommer neste levering?
 Reply (after get_next_delivery; upcoming populated):
-Mandag 11. mai, 10:00 - 12:00. Bestillingen er bekreftet, kr 4436.
+Mandag 11. mai, 10:00 - 12:00.
 </example>
 
 <example name="explicit one-off">
@@ -154,6 +154,12 @@ Reply (after get_next_delivery; upcoming populated for Monday 11 May, cart has 2
 Monday 11 May, 10:00 to 12:00. Recurring list (69 products, top: 2× <url|Tine Lettmelk 1% fett>, 1× <url|Q Skyr Vanilje>) plus 2 extras this week: 1× <url|Snickers Snickers-Is 12 stk>, 1× <url|Bjellands Pizzadeig>.
 
 For the full recurring list, ask *${manager}*.
+</example>
+
+<example name="next delivery total, asked">
+User: how much is the next order?
+Reply (after get_next_delivery; quote upcoming.total since the user asked):
+Monday 11 May lands at kr 4436. That's Oda's confirmed total; could shift slightly with substitutions.
 </example>
 
 <example name="non-grocery item">
