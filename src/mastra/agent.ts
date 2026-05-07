@@ -18,11 +18,7 @@ import {
   removeFromNextDelivery,
 } from "./tools/cart.ts";
 import { getProduct, searchProducts } from "./tools/products.ts";
-import {
-  getRecurringOrder,
-  removeRecurringItem,
-  updateRecurringItem,
-} from "./tools/recurring.ts";
+import { getRecurringOrder } from "./tools/recurring.ts";
 
 const ALLOWED_CHANNELS = new Set(config.slack.allowedChannels);
 
@@ -176,8 +172,6 @@ export const odaAgent = new Agent({
     search_products: searchProducts,
     get_product: getProduct,
     get_recurring_order: getRecurringOrder,
-    update_recurring_item: updateRecurringItem,
-    remove_recurring_item: removeRecurringItem,
     get_next_delivery_extras: getNextDeliveryExtras,
     add_to_next_delivery: addToNextDelivery,
     remove_from_next_delivery: removeFromNextDelivery,

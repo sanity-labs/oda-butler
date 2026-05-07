@@ -9,25 +9,22 @@ The office runs a weekly recurring order on a shared Oda B2B account. The bot le
 - Search and recommend products from Oda's catalog (Norwegian and English queries both work)
 - Look up details on a specific product (price, nutrition, ingredients, allergens, origin, supplier, storage)
 - See what's on the recurring order, when the next delivery lands, and the schedule
-- Add, change, or remove items on the recurring order (forever)
 - Stage one-off additions onto the next scheduled delivery (just this week)
 - Drop one-off additions before they ride along
 - React to messages with a quick emoji instead of a full reply when that fits
 
 The bot has vision: drag a fridge photo into the thread and it'll cross-reference what it sees against the recurring order.
 
-Out of scope: browsing past orders, payment or delivery details, changing the recurring schedule itself. Those need the office manager.
+Out of scope: editing the recurring order, browsing past orders, payment or delivery details, changing the recurring schedule itself. Those go through the office manager.
 
 ## Toolset
 
-Eight domain tools plus two reaction tools (auto-injected by Mastra, hidden from the Slack UI):
+Six domain tools plus two reaction tools (auto-injected by Mastra, hidden from the Slack UI):
 
 ```
 search_products
 get_product
 get_recurring_order
-update_recurring_item
-remove_recurring_item
 get_next_delivery_extras
 add_to_next_delivery
 remove_from_next_delivery

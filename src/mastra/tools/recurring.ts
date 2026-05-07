@@ -8,26 +8,35 @@ export const getRecurringOrder = createTool({
   description: outdent`
     Read the office's recurring order (faste varer): items with
     quantities, the delivery schedule, and a per-delivery cost estimate.
+    The recurring list is read-only context the agent reports on; it is
+    owned by the office manager and not editable through this bot.
+
+    Use this to answer "what's on faste varer?", "when's the next
+    delivery?", or "how much do we spend per delivery?". For staging
+    one-off additions onto the next delivery, use add_to_next_delivery
+    instead.
 
     Returns:
     - items: products on the list with name, quantity, and line price.
     - productCount, totalQuantity: distinct products vs. total units.
     - estimatedTotal, currency: approximate cost per delivery, summed
-      from item prices and quantities. This is the agent-facing answer
-      for "how much do we spend per delivery". Treat it as approximate;
-      Oda's actual delivery total can shift from fees, discounts, or
+      from item prices and quantities. Treat as approximate; Oda's
+      actual delivery total can shift from fees, discounts, or
       out-of-stock substitutions. Null when items have no prices.
     - schedule: pre-formatted strings for next delivery date
       (\`nextDateLabel\`, e.g. "mandag 11. mai") and cadence (\`label\`,
       e.g. "hver mandag, neste mandag 11. mai").
-
-    Call this before update_recurring_item or remove_recurring_item so
-    you know what's already on the list.
   `,
   inputSchema: z.object({}),
   execute: () => oda.getRecurringList(),
 });
 
+/**
+ * Not currently registered on the agent — the office manager owns the
+ * recurring list, so the bot is scoped to cart-only mutations. Kept
+ * here (along with removeRecurringItem) so a future office that wants
+ * recurring edits can re-register them without re-implementing.
+ */
 export const updateRecurringItem = createTool({
   id: "update_recurring_item",
   description: outdent`
