@@ -68,21 +68,15 @@ function hasContent(msg: Message): boolean {
   return (msg.attachments ?? []).some((a) => a.type === "image");
 }
 
-async function toModelMessage(msg: Message, isCurrent: boolean): Promise<Turn> {
+async function toModelMessage(
+  msg: Message,
+  inlineImages: boolean,
+): Promise<Turn> {
   const text = stripMentions(msg.text).trim();
-  // Use the Slack ts as createdAt for historical messages (so they sort
-  // chronologically against each other). For the *current* mention, push
-  // it into the future so it always sorts last after Mastra merges in
-  // memory-replayed assistant turns. Anthropic rejects conversations
-  // that don't end with a user message; memory replay can otherwise
-  // sneak an assistant turn in at the end if its persisted createdAt
-  // happens to be a hair later than the Slack ts of the new mention.
-  const createdAt = isCurrent
-    ? new Date(Date.now() + 60_000)
-    : slackTsToDate(msg.id);
+  const createdAt = slackTsToDate(msg.id);
   const role = msg.author.isMe ? "assistant" : "user";
 
-  const attachments = isCurrent ? await fetchImageAttachments(msg) : [];
+  const attachments = inlineImages ? await fetchImageAttachments(msg) : [];
 
   return {
     id: msg.id,

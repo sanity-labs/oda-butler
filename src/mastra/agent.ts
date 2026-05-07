@@ -10,6 +10,7 @@ import { LOADING_MESSAGE_LIMIT, LOADING_MESSAGE_POOL } from "./constants.ts";
 import { buildConversation } from "./conversation.ts";
 import { buildOdaSystemPrompt } from "./instructions.ts";
 import { memory } from "./memory.ts";
+import { ensureUserLast } from "./processors.ts";
 import { asStreamingPlan } from "./streaming.ts";
 import {
   addToNextDelivery,
@@ -167,6 +168,10 @@ export const odaAgent = new Agent({
   instructions: () => buildOdaSystemPrompt(),
   model: "anthropic/claude-sonnet-4-6",
   memory,
+  // Belt-and-braces: drops any trailing non-user message so Anthropic
+  // never sees a conversation that ends in assistant. See processors.ts
+  // for context.
+  inputProcessors: [ensureUserLast],
   tools: {
     search_products: searchProducts,
     get_product: getProduct,

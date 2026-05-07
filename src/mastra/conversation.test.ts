@@ -140,21 +140,6 @@ test("inlines image attachments as base64 data URLs on the current message only"
   expect(att?.url).toMatch(/^data:image\/jpeg;base64,/);
 });
 
-test("current message createdAt is forced into the future to defeat prefill", async () => {
-  // Mastra's memory layer can replay assistant turns whose persisted
-  // createdAt is a hair later than the Slack ts of a fresh mention
-  // (clock skew, batch persistence delay). Anthropic rejects the
-  // resulting conversation with "This model does not support assistant
-  // message prefill. The conversation must end with a user message."
-  // Defense: stamp the current mention with `Date.now() + 60s` so it
-  // sorts last regardless of any persisted assistant turn.
-  const current = fakeMessage({ id: "1700000001.000000", text: "now" });
-  const turns = await buildConversation(fakeThread([]), current);
-  const currentTurn = turns[0];
-  expect(currentTurn?.id).toBe("1700000001.000000");
-  expect(currentTurn?.createdAt.getTime()).toBeGreaterThan(Date.now() + 30_000);
-});
-
 test("escapes special chars in the from= attribute", async () => {
   const current = fakeMessage({
     id: "1700000001.000000",
