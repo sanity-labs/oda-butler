@@ -33,3 +33,7 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # Finder (MacOS) folder config
 .DS_Store
 data/
+
+# Commit message scratch file used when Bun's terminal can't pass
+# multi-line strings through `git commit -m`. Always temporary.
+.commit-msg.tmp
