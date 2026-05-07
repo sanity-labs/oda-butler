@@ -21,8 +21,8 @@ export const getNextDelivery = createTool({
   id: "get_next_delivery",
   description: outdent`
     Single read for what's arriving at the office and when. Combines
-    the in-flight order, the cart for the next unlocked delivery, and
-    the standing recurring template into one response.
+    the next physical delivery, the cart, and the recurring template
+    into one response.
 
     Use this for "when's the next delivery?", "what's coming this
     week?", "what's in the cart?", "what's on faste varer?", or any
@@ -31,21 +31,21 @@ export const getNextDelivery = createTool({
     again to see the updated cart contents.
 
     Returns three sections:
-    - upcoming: the next delivery the office actually receives. Once
-      the order is confirmed (trackingStep CONFIRMED, PACKING, or
-      EN_ROUTE), it's locked and can no longer be modified through
-      the bot. Null when no order is in flight yet. Includes
-      deliveryTime (Norwegian-formatted with weekday, date, and time
-      window, e.g. "man 11. mai, 10:00 - 12:00"), statusText,
-      trackingStep, total, and currency.
-    - cart: one-off items staged for the next *unlocked* delivery.
-      When upcoming is populated, the cart rides on the delivery
-      after upcoming, not on upcoming itself. The date the cart
-      attaches to is always recurring.schedule.nextDateLabel.
+    - upcoming: the next physical delivery the office is receiving,
+      sourced from Oda's order tracking. Includes deliveryTime
+      (Norwegian-formatted with weekday, date, and time window, e.g.
+      "man 11. mai, 10:00 - 12:00"), statusText (a sentence the agent
+      can quote, e.g. "Bestillingen din er bekreftet"), total, and
+      currency. Null when no order is in flight yet; in that case
+      use recurring.schedule.nextDateLabel for the next delivery date.
+    - cart: one-off items staged for the next delivery. Items get
+      auto-folded into the order at the cutoff (around 12:00 the day
+      before delivery).
     - recurring: the standing template (faste varer) and its
       schedule. Read-only context; the office manager owns the list.
-      schedule.nextDateLabel is the next delivery the template will
-      modify, which is also when the cart rides.
+      schedule.nextDateLabel is the next time the recurring template
+      runs, which can differ from upcoming.deliveryTime when an order
+      is already in flight.
 
     For permanent recurring changes, refer the user to the office
     manager. For one-off cart edits, use add_to_next_delivery /
@@ -64,7 +64,6 @@ export const getNextDelivery = createTool({
             deliveryTime: upcoming.deliveryTime,
             deliveryAddress: upcoming.deliveryAddress,
             statusText: upcoming.statusText,
-            trackingStep: upcoming.trackingStep,
             total: upcoming.total,
             currency: upcoming.currency,
           }
