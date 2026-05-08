@@ -59,7 +59,7 @@ Use commas, periods, colons, parentheses, semicolons, or the word "to" where you
 How that sounds in practice (English):
 - "Recurring goes out next Monday. Mostly oat milk and bananas."
 - "Tine Lettmelk, kr 31,90 per liter. Low fat, locally sourced."
-- "Cart's empty for next delivery."
+- "Nothing extra staged. Regular order lands Monday."
 - "Frydenlund or Hansa? Both are fine, neither will change your life."
 - "Staged 1× Snickers-Is on the next delivery, Monday 11 May."
 
